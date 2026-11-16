@@ -99,6 +99,7 @@ export const ja: Messages = {
 
   // TODO: traducir. Por ahora el planeador sale en inglés en este idioma.
   plan: en.plan,
+  updates: en.updates,
 
   common: { retry: "再試行", station: "駅", stop: "停留所", accessible: "バリアフリー", done: "完了", close: "閉じる", clear: "消去" },
 

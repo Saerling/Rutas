@@ -99,6 +99,7 @@ export const zh: Messages = {
 
   // TODO: traducir. Por ahora el planeador sale en inglés en este idioma.
   plan: en.plan,
+  updates: en.updates,
 
   common: { retry: "重试", station: "车站", stop: "站点", accessible: "无障碍", done: "完成", close: "关闭", clear: "清除" },
 

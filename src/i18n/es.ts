@@ -133,6 +133,14 @@ export const es = {
     live: "En vivo",
     scheduled: "Según horario",
     credit: "Rutas planeadas con Transitous y datos abiertos de TransMilenio. Abre sus fuentes",
+    fare: (cop: string) => `≈ ${cop}`,
+    fareNote: "Pasaje aproximado sin descuentos de transbordo",
+    remind: "Avísame 5 min antes de salir",
+    reminded: (time: string) => `Te avisamos a las ${time}`,
+    reminderTitle: "Ya casi es hora de salir",
+    reminderBody: (first: string) => `Sal ahora para alcanzar el ${first}.`,
+    share: "Compartir viaje",
+    shareText: (to: string, window: string, steps: string) => `Voy a ${to} (${window}): ${steps}`,
     option: (minutes: string, transfers: string, walk: string, window: string) => `${minutes}, ${transfers}, ${walk}, de ${window}. Abre el detalle`,
     trip: {
       start: "Empezar viaje",
@@ -170,6 +178,16 @@ export const es = {
       } as Record<string, string>,
       on: (turn: string, street: string, m: number) => (street ? `${turn} por ${street}, ${m} m` : `${turn}, ${m} m`),
     },
+  },
+
+  updates: {
+    check: "Buscar actualizaciones",
+    available: (tag: string) => `Hay una versión nueva (${tag})`,
+    body: "Descárgala e instálala encima. No pierdes tus guardados.",
+    install: "Descargar",
+    later: "Ahora no",
+    upToDate: "Ya tienes la última versión.",
+    failed: "No pudimos revisar si hay actualizaciones.",
   },
 
   common: { retry: "Reintentar", station: "Estación", stop: "Paradero", accessible: "Accesible", done: "Listo", close: "Cerrar", clear: "Borrar" },

@@ -60,7 +60,8 @@
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
-      ]
+      ],
+      "versionCode": 1
     },
     "web": {
       "output": "server",
@@ -70,7 +71,7 @@
       [
         "expo-router",
         {
-          "origin": "https://rutas.expo.app"
+          "origin": "https://rutas-acme-44c2.vercel.app"
         }
       ],
       [
@@ -102,7 +103,7 @@
     },
     "extra": {
       "router": {
-        "origin": "https://rutas.expo.app",
+        "origin": "https://rutas-acme-44c2.vercel.app",
         "asyncRoutes": {
           "web": true
         }

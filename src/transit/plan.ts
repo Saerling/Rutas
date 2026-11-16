@@ -100,3 +100,29 @@ export function totalWalk(legs: Leg[]): number {
 
 /** The transit legs only, which is what a rider calls "the route": walk to the B10, then the 1-7. */
 export const rides = (it: Itinerary) => it.legs.filter((l) => l.mode === "transit");
+
+/** The single SITP fare for troncal, zonal and TransMiCable in 2026 (Decreto distrital, in force since 14 January 2026). */
+export const FARE_COP = 3550;
+
+/**
+ * Roughly what the trip costs: one fare each time the rider pays to board. Troncal legs taken one after another are a single
+ * entry, because changing buses inside a station is free; a zonal bus, a feeder exit or a new station entry pays again.
+ * It is an estimate: TuLlave transfer discounts and subsidies are not counted.
+ */
+export function estimateFare(it: Itinerary): number {
+  let entries = 0;
+  let inStation = false;
+  for (const leg of it.legs) {
+    if (leg.mode !== "transit") {
+      // A short walk between troncal legs is usually a corridor inside the station.
+      if (inStation && (leg.metres ?? 0) > 150) inStation = false;
+      continue;
+    }
+    const troncal = leg.system === "troncal" || leg.system === "dual";
+    if (leg.system === "alimentador") continue; // feeders are free with a troncal trip
+    if (troncal && inStation) continue;
+    entries++;
+    inStation = troncal;
+  }
+  return entries * FARE_COP;
+}

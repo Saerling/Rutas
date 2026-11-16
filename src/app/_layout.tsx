@@ -14,6 +14,7 @@ import { queryClient } from "@/lib/api";
 import "@/lib/accessibility";
 import "@/lib/appearance";
 import { useOnboarded } from "@/lib/onboarding";
+import { useUpdateCheck } from "@/lib/updates";
 import { usePalette } from "@/theme/colors";
 import { fonts } from "@/theme/tokens";
 
@@ -26,6 +27,7 @@ export default function RootLayout() {
   const palette = usePalette();
   const onboarded = useOnboarded();
   const t = useT();
+  useUpdateCheck();
   const [loaded, failed] = useFonts({
     Geist_400Regular,
     Geist_500Medium,

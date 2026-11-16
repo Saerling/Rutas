@@ -4,10 +4,10 @@ import { PressableScale } from "pressto";
 import { StyleSheet, View } from "react-native";
 
 import { useT } from "@/i18n";
-import { clock } from "@/lib/format";
+import { clock, money } from "@/lib/format";
 import { signal, usePalette } from "@/theme/colors";
 import { radius, size, space } from "@/theme/tokens";
-import type { Itinerary } from "@/transit/plan";
+import { estimateFare, type Itinerary } from "@/transit/plan";
 
 import { Dot } from "./dot";
 import { Icon, icons } from "./icon";
@@ -23,6 +23,7 @@ export function ItineraryCard({ it, fastest }: { it: Itinerary; fastest?: boolea
   const walk = t.plan.walk(it.walkMetres);
   const window = t.plan.window(clock(it.start), clock(it.end));
   const firstRide = it.legs.find((l) => l.mode === "transit");
+  const fare = estimateFare(it);
 
   return (
     <PressableScale
@@ -70,7 +71,7 @@ export function ItineraryCard({ it, fastest }: { it: Itinerary; fastest?: boolea
           </View>
         )}
         <Text variant="caption" tone="muted">
-          {`${transfers} · ${walk}`}
+          {fare ? `${transfers} · ${walk} · ${t.plan.fare(money(fare))}` : `${transfers} · ${walk}`}
         </Text>
       </View>
     </PressableScale>

@@ -81,3 +81,8 @@ export function greeting(now = new Date()): string {
   if (h < 19) return g.afternoon;
   return g.night;
 }
+
+/** Colombian pesos the way they are written on a ticket: $3.550. */
+export function money(cop: number): string {
+  return `$${Math.round(cop).toLocaleString("es-CO").replace(/,/g, ".")}`;
+}

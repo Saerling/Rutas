@@ -99,6 +99,7 @@ export const de: Messages = {
 
   // TODO: traducir. Por ahora el planeador sale en inglés en este idioma.
   plan: en.plan,
+  updates: en.updates,
 
   common: { retry: "Erneut versuchen", station: "Station", stop: "Haltestelle", accessible: "Barrierefrei", done: "Fertig", close: "Schließen", clear: "Löschen" },
 

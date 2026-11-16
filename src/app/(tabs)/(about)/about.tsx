@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import { Button } from "@/components/button";
+import { checkForUpdate, currentBuild } from "@/lib/updates";
 import { Chip } from "@/components/chip";
 import { CromaWordmark } from "@/components/croma-mark";
 import { FeedStatus } from "@/components/feed-status";
@@ -102,6 +103,7 @@ export default function About() {
         </Text>
         <Button label={t.about.report} onPress={() => router.push("/report")} />
         <Button role="link" variant="secondary" label={t.about.code} onPress={() => void WebBrowser.openBrowserAsync(REPO)} />
+        {process.env.EXPO_OS === "android" && <Button variant="secondary" label={t.updates.check} onPress={() => void checkForUpdate(true)} />}
         <Button role="link" variant="quiet" height="md" label={t.about.privacy} onPress={() => router.push("/privacidad")} />
       </View>
 
@@ -140,7 +142,7 @@ export default function About() {
           </Text>
         </View>
         <Text variant="caption" tone="faint">
-          {t.about.version(Constants.expoConfig?.version ?? "")}
+          {t.about.version(`${Constants.expoConfig?.version ?? ""} (${currentBuild()})`)}
         </Text>
       </View>
     </ScrollView>

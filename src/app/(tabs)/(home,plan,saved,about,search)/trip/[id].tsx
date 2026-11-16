@@ -2,7 +2,7 @@ import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Share, StyleSheet, View } from "react-native";
 import { toast } from "sonner-native";
 
 import { Button } from "@/components/button";
@@ -15,11 +15,12 @@ import { Text } from "@/components/text";
 import { TransitMap } from "@/components/transit-map";
 import { useT } from "@/i18n";
 import { announce } from "@/lib/accessibility";
-import { clock } from "@/lib/format";
+import { clock, money } from "@/lib/format";
+import { remindBefore } from "@/lib/reminders";
 import { keepItinerary, knownItinerary, useGuidance, type Guidance } from "@/lib/trip";
 import { signal, usePalette } from "@/theme/colors";
 import { layout, radius, size, space } from "@/theme/tokens";
-import type { Leg } from "@/transit/plan";
+import { estimateFare, type Leg } from "@/transit/plan";
 
 export default function TripScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -27,6 +28,7 @@ export default function TripScreen() {
   const p = usePalette();
   const [it] = useState(() => knownItinerary(id));
   const [on, setOn] = useState(false);
+  const [openedAt] = useState(() => Date.now());
 
   const warn = useCallback(
     (leg: Leg) => {
@@ -54,6 +56,21 @@ export default function TripScreen() {
   if (!it) return <Empty title={t.plan.trip.expired.title} body={t.plan.trip.expired.body} />;
   const last = it.legs[it.legs.length - 1];
 
+  const fare = estimateFare(it);
+  const firstRide = it.legs.find((l) => l.mode === "transit");
+  const window = t.plan.window(clock(it.start), clock(it.end));
+
+  const remind = async () => {
+    void Haptics.selectionAsync();
+    const at = await remindBefore(it, t.plan.reminderTitle, t.plan.reminderBody(firstRide?.code ?? last.to.name));
+    if (at) toast.success(t.plan.reminded(clock(at.toISOString())));
+  };
+
+  const share = () => {
+    const steps = it.legs.map((l) => (l.mode === "transit" ? t.plan.trip.ride(l.code ?? "", l.headsign) : t.plan.trip.walkTo(l.to.name))).join(" → ");
+    void Share.share({ message: t.plan.shareText(last.to.name, window, steps) });
+  };
+
   const toggle = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (!on) keepItinerary(it);
@@ -79,12 +96,19 @@ export default function TripScreen() {
           {t.plan.duration(it.minutes)}
         </Text>
         <Text variant="callout" tone="muted" tabular>
-          {`${t.plan.window(clock(it.start), clock(it.end))} · ${t.plan.transfers(it.transfers)} · ${t.plan.walk(it.walkMetres)}`}
+          {`${window} · ${t.plan.transfers(it.transfers)} · ${t.plan.walk(it.walkMetres)}`}
         </Text>
+        {fare > 0 && (
+          <Text variant="caption" tone="muted" accessibilityLabel={`${t.plan.fare(money(fare))}. ${t.plan.fareNote}`}>
+            {`${t.plan.fare(money(fare))} · ${t.plan.fareNote}`}
+          </Text>
+        )}
       </View>
 
       <Button label={on ? t.plan.trip.end : t.plan.trip.start} variant={on ? "quiet" : "primary"} onPress={toggle} />
       {on && <Live guidance={guidance} legs={it.legs} />}
+      {!on && Date.parse(it.start) - openedAt > 6 * 60_000 && <Button variant="secondary" height="md" label={t.plan.remind} onPress={() => void remind()} />}
+      <Button variant="quiet" height="md" label={t.plan.share} onPress={share} />
 
       <View>
         <Text variant="title" style={styles.heading}>

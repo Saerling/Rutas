@@ -130,6 +130,14 @@ export const en: Messages = {
     live: "Live",
     scheduled: "Timetable",
     credit: "Trips planned with Transitous and TransMilenio open data. Opens its sources",
+    fare: (cop) => `≈ ${cop}`,
+    fareNote: "Approximate fare, without transfer discounts",
+    remind: "Remind me 5 min before leaving",
+    reminded: (time) => `We'll remind you at ${time}`,
+    reminderTitle: "Almost time to leave",
+    reminderBody: (first) => `Leave now to catch the ${first}.`,
+    share: "Share trip",
+    shareText: (to, window, steps) => `Heading to ${to} (${window}): ${steps}`,
     option: (minutes, transfers, walk, window) => `${minutes}, ${transfers}, ${walk}, ${window}. Opens the details`,
     trip: {
       start: "Start trip",
@@ -167,6 +175,16 @@ export const en: Messages = {
       },
       on: (turn, street, m) => (street ? `${turn} on ${street}, ${m} m` : `${turn}, ${m} m`),
     },
+  },
+
+  updates: {
+    check: "Check for updates",
+    available: (tag) => `A new version is out (${tag})`,
+    body: "Download it and install it over this one. Your saved items stay.",
+    install: "Download",
+    later: "Not now",
+    upToDate: "You have the latest version.",
+    failed: "We couldn't check for updates.",
   },
 
   common: { retry: "Try again", station: "Station", stop: "Stop", accessible: "Accessible", done: "Done", close: "Close", clear: "Clear" },
