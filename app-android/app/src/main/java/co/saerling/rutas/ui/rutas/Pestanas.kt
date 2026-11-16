@@ -251,10 +251,11 @@ fun IrScreen(abrir: (Capa) -> Unit) {
                             }
                         }
                     }
-                    item("res-t") { Seccion(if (cargando) "Actualizando…" else "${r.itineraries.size} formas de llegar") }
-                    val ordenadas = ordenar(r.itineraries, Planeador.orden)
-                    val mejor = ordenadas.firstOrNull()
-                    items(ordenadas, key = { it.id }) { it2 -> TarjetaViaje(it2, it2 == mejor, Modifier.revelar("v" + it2.id)) { abrir(Capa.Viaje(it2)) } }
+                    // Como Moovit: una tarjeta por combinación de buses, con sus siguientes salidas debajo.
+                    val grupos = ordenar(r.itineraries, Planeador.orden).groupBy { cadena(it) }.values.toList()
+                    item("res-t") { Seccion(if (cargando) "Actualizando…" else "${grupos.size} formas de llegar") }
+                    val mejor = grupos.firstOrNull()?.first()
+                    items(grupos, key = { it.first().id }) { g -> TarjetaViaje(g.first(), g.first() == mejor, Modifier.revelar("v" + g.first().id), siguientes = g.drop(1).sortedBy { x -> x.start }.take(3)) { abrir(Capa.Viaje(g.first())) } }
                     r.walk?.let { w -> item("pie") { TarjetaViaje(w, false) { abrir(Capa.Viaje(w)) } } }
                     if (r.next != null) item("mas") {
                         Box(Modifier.fillMaxWidth().padding(top = 10.dp), Alignment.Center) {
@@ -286,6 +287,9 @@ private fun ordenar(lista: List<Itinerary>, modo: Int): List<Itinerary> = when (
     3 -> lista.sortedWith(compareBy({ it.transfers }, { it.end }))
     else -> lista.sortedBy { it.minutes + it.walkMetres / 120 + it.transfers * 6 + java.time.Duration.between(java.time.OffsetDateTime.now(), java.time.OffsetDateTime.parse(it.start)).toMinutes().coerceAtLeast(0) / 2 }
 }
+
+/** La combinación de buses de un viaje (K309 › 1), para agrupar las salidas de la misma ruta. */
+private fun cadena(i: Itinerary) = i.legs.filter { it.mode == "transit" }.joinToString(">") { codigoVisible(it.code, it.headsign) }.ifEmpty { "pie" }
 
 private fun nombrar(r: PlanResult, desde: String, hasta: String): PlanResult {
     fun n(s: String) = when (s) { "START" -> desde; "END" -> hasta; else -> s }
@@ -336,7 +340,7 @@ fun minutosHasta(iso: String): Int {
 
 /** Una forma de llegar, como en Moovit: cuánto tarda, la cadena de buses, la hora y el pasaje. */
 @Composable
-fun TarjetaViaje(it: Itinerary, rapida: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun TarjetaViaje(it: Itinerary, rapida: Boolean, modifier: Modifier = Modifier, siguientes: List<Itinerary> = emptyList(), onClick: () -> Unit) {
     val primero = it.legs.firstOrNull { l -> l.mode == "transit" }
     Tarjeta(modifier.padding(horizontal = Margen, vertical = 5.dp).then(if (co.saerling.rutas.fx.fxOn("tilt")) Modifier.inclinar(4f) else Modifier), radio = 26.dp, color = if (rapida) LectorColors.CardHigh else LectorColors.Card, onClick = onClick) {
         Row(verticalAlignment = Alignment.Bottom) {
@@ -365,6 +369,10 @@ fun TarjetaViaje(it: Itinerary, rapida: Boolean, modifier: Modifier = Modifier, 
             Spacer(Modifier.weight(1f))
             val p = it.pasaje()
             Text(listOfNotNull(if (p > 0) "≈ ${pesos(p)}" else null, "${it.walkMetres} m a pie").joinToString(" · "), style = LectorType.Label, color = LectorColors.Muted)
+        }
+        if (siguientes.isNotEmpty()) {
+            val primeros = siguientes.mapNotNull { x -> x.legs.firstOrNull { l -> l.mode == "transit" }?.start?.let { hora(it) } }
+            if (primeros.isNotEmpty()) Text("También sale a las ${primeros.joinToString(" · ")}", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
