@@ -2,7 +2,7 @@ import { en } from "./en";
 import type { Messages } from "./es";
 
 export const pt: Messages = {
-  tabs: { plan: "Ir", nearby: "Perto", saved: "Salvos", about: "Bem público", search: "Buscar" },
+  tabs: { plan: "Ir", nearby: "Perto", saved: "Salvos", settings: "Ajustes", search: "Buscar" },
 
   time: {
     now: "Já",
@@ -100,6 +100,7 @@ export const pt: Messages = {
   // TODO: traducir. Por ahora el planeador sale en inglés en este idioma.
   plan: en.plan,
   updates: en.updates,
+  settings: en.settings,
 
   common: { retry: "Tentar de novo", station: "Estação", stop: "Ponto", accessible: "Acessível", done: "Pronto", close: "Fechar", clear: "Limpar" },
 

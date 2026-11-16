@@ -1,5 +1,7 @@
 # Rutas
 
+<img src="assets/images/icon.png" width="96" alt="Icono de Rutas">
+
 **Cómo llegar en Bogotá, con tu bus en vivo.** TransMilenio, SITP, alimentadores y TransMiCable en un solo lugar, con planeador de viajes estilo Moovit.
 
 Rutas está basada en [Paradero](https://github.com/croma-labs/paradero) de [Croma](https://usecroma.com), licencia MIT. Gracias a su equipo por publicarla abierta.
@@ -15,11 +17,8 @@ Rutas está basada en [Paradero](https://github.com/croma-labs/paradero) de [Cro
 | **Paso a paso** de cada viaje: a pie (giros), buses, paradas y dónde bajarse | ✅ |
 | **Viaje en vivo**: te sigue con el GPS, cuenta las paradas que faltan y avisa **"bájate en la próxima"** con vibración | ✅ |
 | Llegadas en vivo por paradero, buses en el mapa, alertas de servicio, guardados, TuLlave (de Paradero) | ✅ |
-| Notificaciones con la app cerrada y widget | 🔜 |
 | Tarifas y transbordo gratis de TuLlave en el plan | 🔜 |
-| Bicis compartidas y patinetas en el plan | 🔜 |
-| Reportes de la comunidad (qué tan lleno va, varados) | 🔜 |
-| Mapas sin conexión y otras ciudades | 🔜 |
+| Otras ciudades | 🔜 |
 
 El planeador usa [Transitous](https://transitous.org) (MOTIS sobre el GTFS abierto de TransMilenio y SITP), gratis y sin llave. Cambia `PLANNER_URL` para usar tu propio servidor.
 

@@ -1,4 +1,5 @@
 import { Camera, GeoJSONSource, Images, Layer, Map, UserLocation, type CameraRef } from "@maplibre/maplibre-react-native";
+import { useIsFocused } from "expo-router";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -8,12 +9,9 @@ import { systems, usePalette } from "@/theme/colors";
 import { space } from "@/theme/tokens";
 
 import { Text } from "./text";
-import { MAP_CREDIT, type MapHandle, type TransitMapProps } from "./transit-map.types";
+import { MAP_CREDIT, MAP_STYLES, type MapHandle, type TransitMapProps } from "./transit-map.types";
 
-const STYLES = {
-  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-};
+const STYLES = MAP_STYLES;
 
 /** Room left around what is framed on a map that sits above its sheet: clear of the header buttons, and wide enough that a bus at the edge is drawn whole. */
 const FIT_MARGIN = { top: 76, right: 56, bottom: 88, left: 56 };
@@ -45,6 +43,9 @@ export const TransitMap = forwardRef<MapHandle, TransitMapProps>(function Transi
 ) {
   const p = usePalette();
   const { reduceMotion } = useAccessibility();
+  // A map left under another screen keeps nothing moving: the JS thread stays free for the screen in front.
+  const focused = useIsFocused();
+  const still = reduceMotion || !focused;
   const glide = reduceMotion ? 0 : 700;
   const camera = useRef<CameraRef>(null);
 
@@ -67,7 +68,7 @@ export const TransitMap = forwardRef<MapHandle, TransitMapProps>(function Transi
         <Camera ref={camera} initialViewState={{ center: [center.lon, center.lat], zoom }} minZoom={10} maxBounds={[-74.45, 4.3, -73.85, 4.95]} />
 
         {path && path.length > 1 && <RouteLine path={path} quiet={!!approach} />}
-        {approach && approach.length > 1 && <Approach key={focusBusId ?? "none"} path={approach} still={reduceMotion} />}
+        {approach && approach.length > 1 && <Approach key={focusBusId ?? "none"} path={approach} still={still} />}
 
         <GeoJSONSource
           id="stops"
@@ -91,7 +92,7 @@ export const TransitMap = forwardRef<MapHandle, TransitMapProps>(function Transi
         </GeoJSONSource>
 
         <Images images={BUS_IMAGES} />
-        {buses.length > 0 && <MovingBuses buses={buses} path={path} still={reduceMotion} showCodes={showCodes} focusBusId={focusBusId} />}
+        {buses.length > 0 && <MovingBuses buses={buses} path={path} still={still} showCodes={showCodes} focusBusId={focusBusId} />}
 
         {showUser && <UserLocation animated={!reduceMotion} accuracy />}
       </Map>
@@ -135,7 +136,7 @@ const FILL_MS = 1_600;
 const FILL_HOLD_MS = 900;
 /** The line fills in twice to catch the eye, then stays as it is. */
 const FILL_TIMES = 2;
-const FILL_FRAME_MS = 50;
+const FILL_FRAME_MS = 80;
 /** How soft the leading edge of the fill is, as a share of the line. */
 const FILL_EDGE = 0.1;
 

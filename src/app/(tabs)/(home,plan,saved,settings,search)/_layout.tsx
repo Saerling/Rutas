@@ -6,7 +6,7 @@ export const unstable_settings = {
   anchor: "index",
   plan: { anchor: "plan" },
   saved: { anchor: "saved" },
-  about: { anchor: "about" },
+  settings: { anchor: "settings" },
   search: { anchor: "search" },
 };
 
@@ -15,7 +15,7 @@ export default function Layout({ segment }: { segment: string }) {
   const tabs = useT().tabs;
   if (segment === "(plan)") return <TabStack root="plan" title={tabs.plan} />;
   if (segment === "(saved)") return <TabStack root="saved" title={tabs.saved} />;
-  if (segment === "(about)") return <TabStack root="about" title={tabs.about} />;
+  if (segment === "(settings)") return <TabStack root="settings" title={tabs.settings} />;
   if (segment === "(search)") return <TabStack root="search" title={tabs.search} />;
   return <TabStack root="index" />;
 }

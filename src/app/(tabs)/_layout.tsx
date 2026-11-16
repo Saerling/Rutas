@@ -28,9 +28,9 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>{t.tabs.saved}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "star", selected: "star.fill" }} md="star" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(about)">
-        <NativeTabs.Trigger.Label>{t.tabs.about}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: "heart", selected: "heart.fill" }} md="favorite" />
+      <NativeTabs.Trigger name="(settings)">
+        <NativeTabs.Trigger.Label>{t.tabs.settings}</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} md="settings" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="(search)" role="search">
         <NativeTabs.Trigger.Label>{t.tabs.search}</NativeTabs.Trigger.Label>

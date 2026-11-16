@@ -33,7 +33,8 @@ const SLOWING_MS = 15_000;
 const STALE_MS = 120_000;
 /** How long a bus takes to settle from where it is drawn onto where a new report puts it. */
 const SETTLE_MS = 3_000;
-const FRAME_MS = 33;
+/** Buses crawl a few metres a second, so ten frames a second is smooth on the map and leaves the JS thread to scrolling and taps. */
+const FRAME_MS = 100;
 /** Under Reduce Motion buses are redrawn only to pick up new reports. */
 const STILL_MS = 1_000;
 /** A bus on its way with one report so far is moved at a gentle city pace, until a second report gives its own. */

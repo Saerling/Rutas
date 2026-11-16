@@ -208,7 +208,9 @@ export default function Plan() {
                 {t.plan.results}
               </Text>
               {sorted.map((it, i) => (
-                <ItineraryCard key={it.id} it={it} fastest={i === 0} />
+                <Animated.View key={it.id} entering={motion.enter(Math.min(i, 5) * 60)}>
+                  <ItineraryCard it={it} fastest={i === 0} />
+                </Animated.View>
               ))}
               {plan.data.walk && <ItineraryCard it={plan.data.walk} />}
               <Pressable accessibilityRole="link" accessibilityLabel={t.plan.credit} onPress={() => void WebBrowser.openBrowserAsync(SOURCES)}>

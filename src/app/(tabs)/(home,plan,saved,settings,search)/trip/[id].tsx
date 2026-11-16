@@ -2,7 +2,7 @@ import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Share, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { toast } from "sonner-native";
 
 import { Button } from "@/components/button";
@@ -66,10 +66,6 @@ export default function TripScreen() {
     if (at) toast.success(t.plan.reminded(clock(at.toISOString())));
   };
 
-  const share = () => {
-    const steps = it.legs.map((l) => (l.mode === "transit" ? t.plan.trip.ride(l.code ?? "", l.headsign) : t.plan.trip.walkTo(l.to.name))).join(" → ");
-    void Share.share({ message: t.plan.shareText(last.to.name, window, steps) });
-  };
 
   const toggle = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -108,7 +104,6 @@ export default function TripScreen() {
       <Button label={on ? t.plan.trip.end : t.plan.trip.start} variant={on ? "quiet" : "primary"} onPress={toggle} />
       {on && <Live guidance={guidance} legs={it.legs} />}
       {!on && Date.parse(it.start) - openedAt > 6 * 60_000 && <Button variant="secondary" height="md" label={t.plan.remind} onPress={() => void remind()} />}
-      <Button variant="quiet" height="md" label={t.plan.share} onPress={share} />
 
       <View>
         <Text variant="title" style={styles.heading}>

@@ -1,7 +1,7 @@
 import type { Messages } from "./es";
 
 export const en: Messages = {
-  tabs: { plan: "Go", nearby: "Nearby", saved: "Saved", about: "Public good", search: "Search" },
+  tabs: { plan: "Go", nearby: "Nearby", saved: "Saved", settings: "Settings", search: "Search" },
 
   time: {
     now: "Now",
@@ -185,6 +185,21 @@ export const en: Messages = {
     later: "Not now",
     upToDate: "You have the latest version.",
     failed: "We couldn't check for updates.",
+  },
+
+  settings: {
+    general: "General",
+    offline: {
+      title: "Offline map",
+      body: "Download the map of Bogotá to use it with no data: in tunnels, stations or when your plan runs out.",
+      download: "Download Bogotá map",
+      downloading: (p) => `Downloading… ${p}%`,
+      ready: (mb) => `Ready to use offline · ${mb}`,
+      remove: "Delete downloaded map",
+      failed: "The download failed. Check your connection and try again.",
+    },
+    app: "The app",
+    credits: "Based on Paradero by Croma (MIT license). Data from TransMilenio, trips with Transitous, maps © OpenStreetMap and CARTO.",
   },
 
   common: { retry: "Try again", station: "Station", stop: "Stop", accessible: "Accessible", done: "Done", close: "Close", clear: "Clear" },

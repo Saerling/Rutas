@@ -2,7 +2,7 @@ import { en } from "./en";
 import type { Messages } from "./es";
 
 export const ja: Messages = {
-  tabs: { plan: "行く", nearby: "近く", saved: "保存済み", about: "公共財", search: "検索" },
+  tabs: { plan: "行く", nearby: "近く", saved: "保存済み", settings: "設定", search: "検索" },
 
   time: {
     now: "まもなく",
@@ -100,6 +100,7 @@ export const ja: Messages = {
   // TODO: traducir. Por ahora el planeador sale en inglés en este idioma.
   plan: en.plan,
   updates: en.updates,
+  settings: en.settings,
 
   common: { retry: "再試行", station: "駅", stop: "停留所", accessible: "バリアフリー", done: "完了", close: "閉じる", clear: "消去" },
 

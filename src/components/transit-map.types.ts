@@ -25,3 +25,9 @@ export interface TransitMapProps {
 
 /** Who the map is from. It sits on the map in plain sight in place of an info button, and reads the same in every language. */
 export const MAP_CREDIT = "© OpenStreetMap · © CARTO";
+
+/** The CARTO basemaps, shared with the offline download so the saved tiles are the ones the map asks for. */
+export const MAP_STYLES = {
+  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+} as const;

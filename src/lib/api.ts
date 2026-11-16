@@ -16,7 +16,8 @@ export class ApiError extends Error {
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 2,
+      // A missing key or a bad request will not fix itself on retry; only network and upstream hiccups are worth one more try.
+      retry: (count, error) => !(error instanceof ApiError && (error.status < 500 || error.code === "missing_api_key")) && count < 1,
       staleTime: 10_000,
     },
   },

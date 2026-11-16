@@ -13,7 +13,7 @@ import { Dot } from "@/components/dot";
 import { Glass } from "@/components/glass";
 import { StopSignGlyph } from "@/components/glyphs";
 import { Icon, icons } from "@/components/icon";
-import { ParaderoMark } from "@/components/paradero-mark";
+import { RutasMark } from "@/components/rutas-mark";
 import { Text } from "@/components/text";
 import { Tile } from "@/components/tile";
 import { useT } from "@/i18n";
@@ -119,7 +119,7 @@ export default function Onboarding() {
         </View>
         <View style={styles.brand}>
           <View style={styles.name}>
-            <ParaderoMark size={size.icon.lg} color={chrome} ring={photoStep ? photo.track : p.fillStrong} />
+            <RutasMark size={size.icon.lg} color={chrome} accent={chrome} />
             <Text variant="headline" color={chrome} accessibilityRole="header">
               Rutas
             </Text>

@@ -3,7 +3,7 @@
  * key fails the type check instead of showing up blank on someone's phone.
  */
 export const es = {
-  tabs: { plan: "Ir", nearby: "Cerca", saved: "Guardados", about: "Bien público", search: "Buscar" },
+  tabs: { plan: "Ir", nearby: "Cerca", saved: "Guardados", settings: "Ajustes", search: "Buscar" },
 
   time: {
     now: "Ya",
@@ -188,6 +188,21 @@ export const es = {
     later: "Ahora no",
     upToDate: "Ya tienes la última versión.",
     failed: "No pudimos revisar si hay actualizaciones.",
+  },
+
+  settings: {
+    general: "General",
+    offline: {
+      title: "Mapa sin conexión",
+      body: "Descarga el mapa de Bogotá para verlo sin datos: en túneles, estaciones o cuando se acaba el plan.",
+      download: "Descargar mapa de Bogotá",
+      downloading: (p: number) => `Descargando… ${p} %`,
+      ready: (mb: string) => `Listo para usar sin conexión · ${mb}`,
+      remove: "Borrar mapa descargado",
+      failed: "No se pudo descargar. Revisa tu conexión e inténtalo de nuevo.",
+    },
+    app: "La app",
+    credits: "Basada en Paradero de Croma (licencia MIT). Datos de TransMilenio, rutas con Transitous, mapas © OpenStreetMap y CARTO.",
   },
 
   common: { retry: "Reintentar", station: "Estación", stop: "Paradero", accessible: "Accesible", done: "Listo", close: "Cerrar", clear: "Borrar" },
