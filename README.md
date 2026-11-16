@@ -1,18 +1,27 @@
-# Paradero
+# Rutas
 
-**Tu bus, sin adivinar.** La app abierta para moverse en Bogotá: TransMilenio, SITP, alimentadores y TransMiCable en un solo lugar.
+**Cómo llegar en Bogotá, con tu bus en vivo.** TransMilenio, SITP, alimentadores y TransMiCable en un solo lugar, con planeador de viajes estilo Moovit.
 
-<p>
-  <a href="https://apps.apple.com/co/app/id6832336355"><img src=".github/assets/app-store-es.svg" alt="Descargar Paradero en el App Store" height="52"></a>
-  &nbsp;
-  <a href="https://play.google.com/store/apps/details?id=co.usecroma.paradero"><img src=".github/assets/google-play-es.png" alt="Descargar Paradero en Google Play" height="52"></a>
-</p>
+Rutas está basada en [Paradero](https://github.com/croma-labs/paradero) de [Croma](https://usecroma.com), licencia MIT. Gracias a su equipo por publicarla abierta.
 
-**Descárgala gratis y sin anuncios:** [iPhone](https://apps.apple.com/co/app/id6832336355) · [Android](https://play.google.com/store/apps/details?id=co.usecroma.paradero)
+## Lo que suma Rutas sobre Paradero
 
-Un bien público digital de [Croma](https://usecroma.com) · Datos abiertos de TransMilenio · Licencia MIT · [Privacidad](https://transmi.usecroma.com/paradero/privacidad) · No es una app oficial del Distrito.
+| Función (estilo Moovit) | Estado |
+| --- | --- |
+| **Planeador de viajes A → B** con transbordos, caminata y horario (pestaña *Ir*) | ✅ |
+| Salir ahora, en 15/30/60 min o **llegar a una hora** | ✅ |
+| Opciones **accesibles** (silla de ruedas) y **menos transbordos** | ✅ |
+| **Casa y Trabajo** guardados, y lugares recientes (solo en el teléfono) | ✅ |
+| **Paso a paso** de cada viaje: a pie (giros), buses, paradas y dónde bajarse | ✅ |
+| **Viaje en vivo**: te sigue con el GPS, cuenta las paradas que faltan y avisa **"bájate en la próxima"** con vibración | ✅ |
+| Llegadas en vivo por paradero, buses en el mapa, alertas de servicio, guardados, TuLlave (de Paradero) | ✅ |
+| Notificaciones con la app cerrada y widget | 🔜 |
+| Tarifas y transbordo gratis de TuLlave en el plan | 🔜 |
+| Bicis compartidas y patinetas en el plan | 🔜 |
+| Reportes de la comunidad (qué tan lleno va, varados) | 🔜 |
+| Mapas sin conexión y otras ciudades | 🔜 |
 
-![Paradero en cuatro pantallas: la bienvenida, los paraderos cercanos en el mapa, un paradero con su bus articulado acercándose en vivo y la ruta B10 con sus buses en camino](.github/assets/hero.jpg)
+El planeador usa [Transitous](https://transitous.org) (MOTIS sobre el GTFS abierto de TransMilenio y SITP), gratis y sin llave. Cambia `PLANNER_URL` para usar tu propio servidor.
 
 ## Un bien común, para el Estado y para la gente
 
@@ -63,8 +72,8 @@ Paradero está construida para cumplir los nueve indicadores del [Digital Public
 ## Correrla
 
 ```bash
-git clone https://github.com/croma-labs/paradero
-cd paradero
+git clone https://github.com/Saerling/Rutas
+cd Rutas
 npm install
 cp .env.example .env.local   # pega tu CROMA_API_KEY, gratis en platform.usecroma.com
 npx expo run:ios             # o: npx expo run:android
@@ -88,6 +97,8 @@ La llave de la API vive solo en el servidor. Cada respuesta se comparte unos seg
 | `GET /api/search?q` | Rutas y paraderos por código o nombre |
 | `GET /api/stops/:id` | Paradero, próximos buses, buses en camino y novedades |
 | `GET /api/routes/:id` | Recorrido, paradas, buses en vía y novedades |
+| `GET /api/plan?fromLat&fromLon&toLat&toLon` | Formas de llegar de A a B (Transitous) |
+| `GET /api/places?q` | Lugares, direcciones y estaciones |
 | `GET /api/health` | Si TransMilenio está publicando en vivo |
 
 Expo SDK 58 · Expo Router con pestañas nativas · Liquid Glass · MapLibre · TanStack Query · SQLite local · Zod · con la identidad de Croma (Geist, Geist Mono y Victor Mono), en claro y oscuro.

@@ -1,7 +1,8 @@
+import { en } from "./en";
 import type { Messages } from "./es";
 
 export const zh: Messages = {
-  tabs: { nearby: "附近", saved: "收藏", about: "公共产品", search: "搜索" },
+  tabs: { plan: "出发", nearby: "附近", saved: "收藏", about: "公共产品", search: "搜索" },
 
   time: {
     now: "即将",
@@ -95,6 +96,9 @@ export const zh: Messages = {
     failed: { title: "无法加载站点", body: "请检查网络连接。连接恢复后我们会自动重试。" },
     none: { title: "700 米内没有站点", body: "搜索车站名称或你乘坐的线路。" },
   },
+
+  // TODO: traducir. Por ahora el planeador sale en inglés en este idioma.
+  plan: en.plan,
 
   common: { retry: "重试", station: "车站", stop: "站点", accessible: "无障碍", done: "完成", close: "关闭", clear: "清除" },
 

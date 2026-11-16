@@ -1,7 +1,8 @@
+import { en } from "./en";
 import type { Messages } from "./es";
 
 export const de: Messages = {
-  tabs: { nearby: "In der Nähe", saved: "Gespeichert", about: "Gemeingut", search: "Suchen" },
+  tabs: { plan: "Los", nearby: "In der Nähe", saved: "Gespeichert", about: "Gemeingut", search: "Suchen" },
 
   time: {
     now: "Jetzt",
@@ -95,6 +96,9 @@ export const de: Messages = {
     failed: { title: "Haltestellen konnten nicht geladen werden", body: "Prüfe deine Verbindung. Sobald sie zurück ist, versuchen wir es erneut." },
     none: { title: "Keine Haltestellen im Umkreis von 700 m", body: "Suche nach einem Stationsnamen oder deiner Linie." },
   },
+
+  // TODO: traducir. Por ahora el planeador sale en inglés en este idioma.
+  plan: en.plan,
 
   common: { retry: "Erneut versuchen", station: "Station", stop: "Haltestelle", accessible: "Barrierefrei", done: "Fertig", close: "Schließen", clear: "Löschen" },
 

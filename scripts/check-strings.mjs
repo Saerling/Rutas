@@ -10,7 +10,7 @@ import ts from "typescript";
 const ROOT = new URL("..", import.meta.url).pathname;
 const DIRS = ["src/app", "src/components"];
 const SPOKEN_PROPS = new Set(["accessibilityLabel", "accessibilityHint", "label", "title", "placeholder", "body", "action", "detail", "description"]);
-const SAME_EVERYWHERE = new Set(["Paradero", "Croma", "TransMilenio", "usecroma.com", "C.C. Lourdes"]);
+const SAME_EVERYWHERE = new Set(["Rutas", "Paradero", "Croma", "TransMilenio", "usecroma.com", "C.C. Lourdes"]);
 const LETTERS = /\p{L}{2,}/u;
 
 function files(dir) {

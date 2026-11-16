@@ -1,7 +1,8 @@
+import { en } from "./en";
 import type { Messages } from "./es";
 
 export const ja: Messages = {
-  tabs: { nearby: "近く", saved: "保存済み", about: "公共財", search: "検索" },
+  tabs: { plan: "行く", nearby: "近く", saved: "保存済み", about: "公共財", search: "検索" },
 
   time: {
     now: "まもなく",
@@ -95,6 +96,9 @@ export const ja: Messages = {
     failed: { title: "停留所を読み込めませんでした", body: "接続を確認してください。接続が戻りしだい再試行します。" },
     none: { title: "700 m以内に停留所がありません", body: "駅名か、乗る路線で検索してください。" },
   },
+
+  // TODO: traducir. Por ahora el planeador sale en inglés en este idioma.
+  plan: en.plan,
 
   common: { retry: "再試行", station: "駅", stop: "停留所", accessible: "バリアフリー", done: "完了", close: "閉じる", clear: "消去" },
 

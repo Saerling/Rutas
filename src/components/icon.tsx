@@ -5,6 +5,7 @@ import Svg, { Path } from "react-native-svg";
 import { size as sizes } from "@/theme/tokens";
 
 type Name = Extract<SymbolViewProps["name"], { ios?: unknown }>;
+export type IconName = Name;
 
 interface IconProps {
   name: Name;
@@ -52,4 +53,11 @@ export const icons = {
   check: { ios: "checkmark", android: "check" },
   flag: { ios: "exclamationmark.bubble", android: "feedback" },
   contactless: { ios: "wave.3.right", android: "contactless" },
+  directions: { ios: "arrow.triangle.turn.up.right.diamond.fill", android: "directions" },
+  swap: { ios: "arrow.up.arrow.down", android: "swap_vert" },
+  home: { ios: "house.fill", android: "home" },
+  work: { ios: "briefcase.fill", android: "work" },
+  pin: { ios: "mappin.circle.fill", android: "place" },
+  history: { ios: "clock.arrow.circlepath", android: "history" },
+  flagEnd: { ios: "flag.checkered", android: "sports_score" },
 } satisfies Record<string, Name>;

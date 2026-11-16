@@ -20,6 +20,10 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>{t.tabs.nearby}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon src={require("@/assets/images/tabs/tab-nearby.png")} renderingMode="template" />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="(plan)">
+        <NativeTabs.Trigger.Label>{t.tabs.plan}</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "arrow.triangle.turn.up.right.diamond", selected: "arrow.triangle.turn.up.right.diamond.fill" }} md="directions" />
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="(saved)">
         <NativeTabs.Trigger.Label>{t.tabs.saved}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "star", selected: "star.fill" }} md="star" />

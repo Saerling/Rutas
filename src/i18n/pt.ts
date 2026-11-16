@@ -1,7 +1,8 @@
+import { en } from "./en";
 import type { Messages } from "./es";
 
 export const pt: Messages = {
-  tabs: { nearby: "Perto", saved: "Salvos", about: "Bem público", search: "Buscar" },
+  tabs: { plan: "Ir", nearby: "Perto", saved: "Salvos", about: "Bem público", search: "Buscar" },
 
   time: {
     now: "Já",
@@ -95,6 +96,9 @@ export const pt: Messages = {
     failed: { title: "Não conseguimos carregar os pontos", body: "Verifique sua conexão. Tentamos de novo assim que ela voltar." },
     none: { title: "Nenhum ponto a 700 m", body: "Busque o nome de uma estação ou a linha que você pega." },
   },
+
+  // TODO: traducir. Por ahora el planeador sale en inglés en este idioma.
+  plan: en.plan,
 
   common: { retry: "Tentar de novo", station: "Estação", stop: "Ponto", accessible: "Acessível", done: "Pronto", close: "Fechar", clear: "Limpar" },
 
