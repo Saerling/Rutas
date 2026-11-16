@@ -7,32 +7,34 @@ concurrency: { group: apk, cancel-in-progress: true }
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults: { run: { working-directory: app-android } }
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
-      - run: npm ci
-      - name: Versión (0.1.<número de compilación>)
-        run: |
-          N=${{ github.run_number }}
-          jq --arg v "0.1.$N" --argjson c "$N" '.expo.version=$v | .expo.android.versionCode=$c' app.json > app.tmp && mv app.tmp app.json
-      - run: npx expo prebuild -p android --no-install
-      - name: Firma estable (para que cada versión se instale encima de la anterior)
-        env: { KS: "${{ secrets.KEYSTORE_B64 }}" }
-        run: |
-          if [ -n "$KS" ]; then echo "$KS" | base64 -d > android/app/debug.keystore; else cp credentials/rutas.keystore android/app/debug.keystore; fi
-          printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g\nreactNativeArchitectures=arm64-v8a,armeabi-v7a\n' >> android/gradle.properties
-      - name: Compilar
-        working-directory: android
-        run: ./gradlew assembleRelease --no-daemon && mv app/build/outputs/apk/release/app-release.apk ../Rutas-0.1.${{ github.run_number }}.apk
+        with: { gradle-version: "8.14.3" }
+      - name: Compilar (Kotlin nativo, estética Mochy)
+        run: gradle :app:assembleRelease --no-daemon --stacktrace && mv app/build/outputs/apk/release/app-release.apk ../Rutas-0.2.${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
         with: { name: Rutas-apk, path: "Rutas-*.apk" }
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v0.1.${{ github.run_number }}"
-          name: "Rutas 0.1.${{ github.run_number }}"
+          tag_name: "v0.2.${{ github.run_number }}"
+          name: "Rutas 0.2.${{ github.run_number }}"
           body: ${{ github.event.head_commit.message }}
           files: "Rutas-*.apk"
+  capturas:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: app-android } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.14.3" }
+      - name: Capturas de pantalla (Robolectric)
+        run: gradle :app:testDebugUnitTest --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: capturas, path: app-android/app/build/capturas, if-no-files-found: ignore }

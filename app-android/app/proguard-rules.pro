@@ -1,0 +1,8 @@
+-keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
+-keep class org.maplibre.** { *; }
+-keepclassmembers @kotlinx.serialization.Serializable class co.saerling.rutas.** { *; }
+-keep,includedescriptorclasses class co.saerling.rutas.**$$serializer { *; }
+-keepclassmembers class co.saerling.rutas.** { *** Companion; kotlinx.serialization.KSerializer serializer(...); }
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
