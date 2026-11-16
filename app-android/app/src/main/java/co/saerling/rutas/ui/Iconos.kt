@@ -131,7 +131,7 @@ fun BotonDescarga(
                 Canvas(Modifier.size(30.dp)) {
                     drawCircle(apagado, style = Stroke(width = 2.dp.toPx()))
                 }
-                Icon(Iconos.Descargar, "Descargar capítulo", tint = apagado, modifier = Modifier.size(18.dp))
+                Icon(Iconos.Descargar, "Descargar", tint = apagado, modifier = Modifier.size(18.dp))
             }
             is EstadoDescarga.Descargando -> {
                 Canvas(Modifier.size(30.dp)) {

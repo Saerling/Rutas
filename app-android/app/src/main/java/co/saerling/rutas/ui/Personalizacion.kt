@@ -251,7 +251,6 @@ private fun ContenidoSeccion(s: SeccionP, almacen: Almacen, onBibliotecaFx: () -
                 Box(Modifier.fillMaxSize().background(if (a == AnimArranque.NINGUNA) LectorColors.Bg else Color.Black), Alignment.Center) {
                     when (a) {
                         AnimArranque.PUNTOS -> LogoApp(Modifier.size(84.dp), conFondo = false)
-                        AnimArranque.AGUJERO -> LogoApp(Modifier.size(70.dp), conFondo = false, agujero = true)
                         AnimArranque.RAPIDA -> LogoApp(Modifier.size(46.dp).graphicsLayer { alpha = 0.55f }, conFondo = false)
                         AnimArranque.NINGUNA -> VistaBarra(Aspecto.superficie, Modifier.align(Alignment.BottomCenter))
                     }
@@ -659,7 +658,7 @@ private fun SeccionEstilo() {
         )
         Column(Modifier.fillMaxWidth().clip(FormaTarjeta).background(ColP.Tarjeta).padding(SangriaTexto)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                LText("Thinking orbs", EstiloEtiquetaTarjeta, Modifier.weight(1f), color = ColP.Texto.copy(alpha = 0.9f))
+                LText("Orbes de carga", EstiloEtiquetaTarjeta, Modifier.weight(1f), color = ColP.Texto.copy(alpha = 0.9f))
                 Interruptor(e.orbes, { e.elegirOrbes(it) })
             }
             Spacer(Modifier.height(6.dp))
@@ -695,7 +694,7 @@ private fun SeccionEstilo() {
                 when (e.variarOrbes) {
                     co.saerling.rutas.ui.mochy.EstiloApp.VariarOrbes.CAMBIANDO -> "Cada indicador va pasando por los nueve tipos."
                     co.saerling.rutas.ui.mochy.EstiloApp.VariarOrbes.AZAR -> "Cada vez que aparece una carga sale un tipo distinto."
-                    co.saerling.rutas.ui.mochy.EstiloApp.VariarOrbes.TAREA -> "Cada espera usa el suyo: buscar, conectar, revisar, migrar…"
+                    co.saerling.rutas.ui.mochy.EstiloApp.VariarOrbes.TAREA -> "Cada espera usa el suyo: buscar rutas, ubicarte, conectar…"
                 },
                 EstiloPie, color = LectorColors.Muted,
             )

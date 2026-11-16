@@ -124,7 +124,7 @@ fun DemoFx(id: String) {
         "login", "loginform" -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { Text("Inicia sesión", style = t.titleLarge); Spacer(Modifier.height(10.dp)); var e by remember { mutableStateOf("") }; OutlinedTextField(e, { e = it }, Modifier.fillMaxWidth(), label = { Text("Correo") }, shape = RoundedCornerShape(14.dp)); Spacer(Modifier.height(10.dp)); BotonMagico("Continuar", Modifier.fillMaxWidth()) {} }
         "onboarding" -> Box(Modifier.height(320.dp)) { Bienvenida(listOf(Triple("👋", "Bienvenido", "Así empieza la app."), Triple("✨", "Personaliza", "Activa lo que te guste."), Triple("🚀", "Listo", "A disfrutar.")), {}) }
         "sidebar" -> { var v by remember { mutableStateOf(false) }; Box(Modifier.fillMaxWidth().height(260.dp)) { Button({ v = true }, Modifier.align(Alignment.Center)) { Text("Abrir panel lateral") }; PanelLateral(v, { v = false }, ancho = 200.dp) { Text("Espacios", style = t.titleMedium); listOf("Personal", "Trabajo", "Universidad").forEach { Text(it, Modifier.padding(vertical = 10.dp)) } } } }
-        "stats" -> { var k by remember { mutableIntStateOf(0) }; Column(horizontalAlignment = Alignment.CenterHorizontally) { TarjetaEstadistica("Capítulos leídos", 120 + k * 7, 3.5f, k % 15, Modifier.fillMaxWidth()); TextButton({ k++ }) { Text("Estilo ${k % 15 + 1} de 15 →") } } }
+        "stats" -> { var k by remember { mutableIntStateOf(0) }; Column(horizontalAlignment = Alignment.CenterHorizontally) { TarjetaEstadistica("Viajes hechos", 120 + k * 7, 3.5f, k % 15, Modifier.fillMaxWidth()); TextButton({ k++ }) { Text("Estilo ${k % 15 + 1} de 15 →") } } }
         "tables", "table", "taskstable", "usersselect" -> TablaFx(listOf("Nombre", "Estado"), listOf(listOf("manhwa-online", "Aprobada"), listOf("otra-fuente", "Pendiente"), listOf("ejemplo", "Rechazada")), Modifier.fillMaxWidth(), seleccionable = id == "usersselect" || id == "tables")
         // ── Magic UI
         "progblur" -> Box(Modifier.fillMaxWidth().height(170.dp).desenfoqueProgresivo(70.dp)) { Column { repeat(8) { Text("Línea de contenido número $it que pasa bajo la barra", Modifier.padding(4.dp)) } } }
@@ -141,8 +141,8 @@ fun DemoFx(id: String) {
         "numberticker", "slidingnumber", "animatednumber", "numberflow" -> { var n by remember { mutableIntStateOf(1240) }; Column(horizontalAlignment = Alignment.CenterHorizontally) { NumeroFlow(n, t.displaySmall); Row { TextButton({ n -= 37 }) { Text("−") }; TextButton({ n += 137 }) { Text("+") } } } }
         "numbergroup" -> { var p by remember { mutableIntStateOf(12) }; Column(horizontalAlignment = Alignment.CenterHorizontally) { NumeroFlowGrupo(p, 40, t.headlineMedium); Row { TextButton({ p = (p - 1).coerceAtLeast(1) }) { Text("‹") }; TextButton({ p = (p + 1).coerceAtMost(40) }) { Text("›") } } } }
         "numberdecimal" -> { var v by remember { mutableFloatStateOf(1.25f) }; CampoNumero(v, { v = it }, paso = .05f, decimales = 2, sufijo = " mm") }
-        "shinytext", "textshimmer", "diareveal" -> TextoBrillo(if (id == "diareveal") "Pensando la respuesta…" else "Nuevo capítulo", t.titleLarge)
-        "shimmerwave" -> TextoBrillo("Cargando capítulos", t.titleLarge, ola = true)
+        "shinytext", "textshimmer", "diareveal" -> TextoBrillo(if (id == "diareveal") "Buscando la mejor ruta…" else "Bus en camino", t.titleLarge)
+        "shimmerwave" -> TextoBrillo("Cargando rutas", t.titleLarge, ola = true)
         "comictext" -> TextoComic("¡BOOM!")
         "pulsating" -> Box(Modifier.pulso(C, 50.dp).clip(RoundedCornerShape(50)).background(C).padding(horizontal = 22.dp, vertical = 12.dp)) { Text("Continuar leyendo") }
         "circularprogress", "progressring", "meter" -> { var f by remember { mutableFloatStateOf(.62f) }; Column(horizontalAlignment = Alignment.CenterHorizontally) { AnilloProgreso(f, Modifier.size(90.dp)); Slider(f, { f = it }) } }
@@ -153,14 +153,14 @@ fun DemoFx(id: String) {
         "borderbeam", "bordertrail" -> Caja(Modifier.fillMaxWidth().height(70.dp).hazBorde(16.dp)) { Text("fyx.app/cargando…") }
         "typing" -> TextoEscribiendo("Escribiendo la respuesta como una IA…", t.titleMedium)
         "hypertext", "scramble" -> { var k by remember { mutableIntStateOf(0) }; Box(Modifier.clickable { k++ }) { key(k) { TextoBarajado("FYX BROWSER", t.headlineSmall) } } }
-        "wordrotate", "textloop" -> Row { Text("Buscar ", style = t.titleLarge); TextoRotando(listOf("noticias", "recetas", "manga", "música"), t.titleLarge, color = C) }
+        "wordrotate", "textloop" -> Row { Text("Buscar ", style = t.titleLarge); TextoRotando(listOf("paraderos", "rutas", "estaciones", "lugares"), t.titleLarge, color = C) }
         "morphingtext" -> TextoRotando(listOf("Rápido", "Ligero", "Tuyo"), t.headlineMedium, morph = true)
         "textmorph", "textroll" -> { var b by remember { mutableStateOf(false) }; Button({ b = !b }) { TextoMorph(if (b) "Guardado" else "Guardar", t.labelLarge) } }
         "lightrays" -> Box(Modifier.fillMaxWidth().height(140.dp).background(Color(0xFF0B0B12))) { RayosDeLuz(Modifier.matchParentSize()) }
         "dock", "macdock", "appdock", "editordock" -> DockMagnificado(if (id == "editordock") listOf("✏️", "🖍", "🧽", "➰", "🔷", "T", "🖼") else listOf("🏠", "🔍", "📚", "⬇", "⚙"))
         "smoothcursor", "pointer" -> Caja(Modifier.fillMaxWidth().height(130.dp).cursorSuave()) { Text("Mueve el dedo o el lápiz") }
         "avatars", "presencedock", "avatar" -> AvataresSuperpuestos(listOf("J", "A", "M", "S"), extra = 3)
-        "animatedlist", "notifications" -> { var k by remember { mutableIntStateOf(0) }; Column(Modifier.clickable { k++ }) { key(k) { ListaAnimada(listOf("Nuevo capítulo de Solo Leveling", "Descarga terminada", "Copia de seguridad lista")) } } }
+        "animatedlist", "notifications" -> { var k by remember { mutableIntStateOf(0) }; Column(Modifier.clickable { k++ }) { key(k) { ListaAnimada(listOf("Tu bus llega en 3 min", "Mapa sin conexión listo", "Saldo TuLlave leído")) } } }
         "dotpattern", "dotgrid" -> Caja(Modifier.fillMaxWidth().height(110.dp).patron(Patron.Puntos, Color(0x66FFFFFF)), Color(0xFF1C1C22))
         "gridpattern", "graphpaper" -> Caja(Modifier.fillMaxWidth().height(110.dp).patron(if (id == "graphpaper") Patron.Milimetrado else Patron.Cuadricula, Color(0x55FFFFFF)), Color(0xFF1C1C22))
         "linegrid", "notepad" -> Caja(Modifier.fillMaxWidth().height(110.dp).patron(Patron.Lineas, Color(0x6690A4FF)), if (id == "notepad") Color(0xFFFFF8DC) else Color(0xFF1C1C22)) { if (id == "notepad") Text("Mis apuntes de química", color = Color(0xFF333333)) }
@@ -195,7 +195,7 @@ fun DemoFx(id: String) {
         "empty" -> EstadoVacio("📭", "Nada por aquí", "Cuando añadas algo aparecerá en esta lista.")
         "skeleton" -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(3) { Box(Modifier.size(70.dp, 100.dp).esqueleto()) } }
         "slider" -> { var f by remember { mutableFloatStateOf(.4f) }; Column { Slider(f, { f = it }); NumeroFlow((f * 100).toInt(), t.titleMedium, sufijo = " %") } }
-        "segmented", "segmentedcontrol", "togglegroup", "tabs", "animatedbg" -> { var s by remember { mutableIntStateOf(0) }; SegmentadoDeslizante(when (id) { "togglegroup" -> listOf("Lápiz", "Marcador", "Borrador"); "tabs" -> listOf("Capítulos", "Info", "Similares"); else -> listOf("Paginado", "Vertical", "Webtoon") }, s, { s = it }) }
+        "segmented", "segmentedcontrol", "togglegroup", "tabs", "animatedbg" -> { var s by remember { mutableIntStateOf(0) }; SegmentadoDeslizante(when (id) { "togglegroup" -> listOf("Bus", "Troncal", "A pie"); "tabs" -> listOf("Paradas", "Horario", "Mapa"); else -> listOf("Mejor", "Rápido", "Menos a pie") }, s, { s = it }) }
         "accordion", "collapsible", "disclosure", "transitionpanel" -> Column(Modifier.fillMaxWidth()) { Desplegable("Lector") { Text("Dirección, zoom, filtros", Modifier.alpha(.7f)) }; Desplegable("Descargas") { Text("Carpeta, solo Wi-Fi", Modifier.alpha(.7f)) } }
         "tooltip" -> { var v by remember { mutableStateOf(false) }; Column(horizontalAlignment = Alignment.CenterHorizontally) { AnimatedVisibility(v) { Text("Pista útil", Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFF3A3A44)).padding(8.dp)) }; OutlinedButton({ v = !v }) { Text("?") } } }
         "popover", "previewcard", "morphpopover" -> PopoverMorph(if (id == "previewcard") "Mantén un enlace" else "Color") { cerrar -> if (id == "morphpopover" || id == "popover") Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(Color(0xFF111111), Color(0xFFE5484D), Color(0xFF2D5BD9), Color(0xFFF2B705), Color(0xFF30A46C)).forEach { c -> Box(Modifier.size(30.dp).clip(CircleShape).background(c).clickable { cerrar() }) } } else { Box(Modifier.fillMaxWidth().height(90.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(C, Color(0xFF7C3AED))))); Text("wikipedia.org — Termodinámica", Modifier.padding(top = 8.dp)); TextButton(cerrar) { Text("Abrir") } } }
@@ -243,7 +243,7 @@ fun DemoFx(id: String) {
         "stackedfolder", "foldertab" -> TarjetaCarpeta("Universidad", "12 cuadernos", Color(0xFF2D5BD9), Modifier.width(170.dp))
         "floatingpill" -> Box(Modifier.clip(RoundedCornerShape(50)).background(C).ondaAlTocar().padding(horizontal = 20.dp, vertical = 14.dp)) { Text("＋ Nuevo") }
         "imagecompare" -> Comparador(Modifier.fillMaxWidth().height(130.dp).clip(RoundedCornerShape(14.dp)), { Portada(Modifier.fillMaxSize(), 0) }, { Portada(Modifier.fillMaxSize(), 1) })
-        "morphdialog" -> TarjetaMorph(cerrada = { Portada(Modifier.width(90.dp), 2) }) { cerrar -> Column(Modifier.fillMaxSize().padding(24.dp)) { Portada(Modifier.width(160.dp), 2); Spacer(Modifier.height(16.dp)); Text("Ficha del manga", style = MaterialTheme.typography.headlineSmall, color = Color.White); Spacer(Modifier.weight(1f)); Button(cerrar) { Text("Cerrar") } } }
+        "morphdialog" -> TarjetaMorph(cerrada = { Portada(Modifier.width(90.dp), 2) }) { cerrar -> Column(Modifier.fillMaxSize().padding(24.dp)) { Portada(Modifier.width(160.dp), 2); Spacer(Modifier.height(16.dp)); Text("Detalle de la ruta", style = MaterialTheme.typography.headlineSmall, color = Color.White); Spacer(Modifier.weight(1f)); Button(cerrar) { Text("Cerrar") } } }
         "carousel" -> CarruselEscala(6, Modifier.fillMaxWidth().height(170.dp)) { Portada(Modifier.fillMaxHeight(), it) }
         "tilt" -> Portada(Modifier.width(110.dp).inclinar())
         "magnetic" -> Box(Modifier.magnetico().clip(RoundedCornerShape(50)).background(C).padding(horizontal = 22.dp, vertical = 12.dp)) { Text("Arrástrame") }

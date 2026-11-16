@@ -40,61 +40,123 @@ import java.time.LocalTime
 @Composable
 fun CercaScreen(abrir: (Capa) -> Unit) {
     val ctx = LocalContext.current
-    val pedir = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { Ubicacion.empezar(ctx) }
+    val pedir = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        Ubicacion.empezar(ctx)
+        if (!Ubicacion.tienePermiso(ctx)) Avisos.mostrar("Sin permiso de ubicación: mueve el mapa para ver paraderos")
+    }
     LaunchedEffect(Unit) { Ubicacion.empezar(ctx) }
     val yo = Ubicacion.actual
     val punto = yo?.takeIf { Ubicacion.enBogota(it.first, it.second) }
-    // La ubicación redondeada a una cuadra: moverse unos metros no vuelve a pedir la lista.
-    val clave = punto?.let { "%.3f,%.3f".format(it.first, it.second) }
+    // Zona elegida moviendo el mapa ("Buscar en esta zona"); si no, donde estás.
+    var zona by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    var centroMapa by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    val base = zona ?: punto
+    val clave = base?.let { "%.3f,%.3f".format(java.util.Locale.US, it.first, it.second) }
+    var intento by remember { mutableIntStateOf(0) }
     var cerca by remember { mutableStateOf<List<Stop>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf(false) }
     var feed by remember { mutableStateOf<Feed?>(null) }
-    LaunchedEffect(clave) {
-        val p = punto ?: return@LaunchedEffect
-        error = null
-        runCatching { Api.cerca(p.first, p.second).stops }.onSuccess { cerca = it }.onFailure { error = it.message }
+    LaunchedEffect(clave, intento) {
+        val p = base ?: return@LaunchedEffect
+        error = false
+        runCatching { Api.cerca(p.first, p.second).stops }.onSuccess { cerca = it }.onFailure { error = true }
     }
     LaunchedEffect(Unit) { while (true) { feed = runCatching { Api.salud().feed }.getOrNull(); delay(60_000) } }
-
+    val gpsApagado = Ubicacion.permiso && yo == null && !Ubicacion.gpsEncendido(ctx)
     val saludo = when (LocalTime.now().hour) { in 5..11 -> "Buenos días"; in 12..18 -> "Buenas tardes"; else -> "Buenas noches" }
-    PaginaPestana("Cerca", saludo) {
-        item("estado") { EstadoDatos(feed) }
-        item("mapa") {
-            Box(Modifier.padding(horizontal = Margen).padding(top = 12.dp).fillMaxWidth().height(230.dp).clip(SuaveShape(28.dp)).background(LectorColors.Card)) {
-                Mapa(
-                    Modifier.fillMaxSize(), centro = punto ?: Ubicacion.BOGOTA, zoom = if (punto != null) 15.5 else 11.5,
-                    puntos = cerca.orEmpty().take(15).map { PuntoMapa(it.id, it.lat, it.lon, it.kind == "station") }, yo = punto,
-                    encuadrar = listOfNotNull(punto) + cerca.orEmpty().take(6).map { it.lat to it.lon },
-                    alTocarPunto = { id -> abrir(Capa.Paradero(id)) },
-                )
-            }
-        }
-        if (Guardados.paraderos.isNotEmpty()) {
-            item("guardados-t") { Seccion("Tus paraderos") }
-            item("guardados") {
-                Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Guardados.paraderos.forEach { g -> TarjetaGuardado(g) { abrir(Capa.Paradero(g.id)) } }
+
+    MapaConHoja(
+        asomo = 0.42f,
+        finLista = 120.dp,
+        mapa = { abajo, pedido ->
+            Mapa(
+                Modifier.fillMaxSize(), centro = base ?: Ubicacion.BOGOTA, zoom = if (base != null) 15.5 else 11.5,
+                puntos = cerca.orEmpty().take(25).map { PuntoMapa(it.id, it.lat, it.lon, it.kind == "station") }, yo = punto,
+                encuadrar = if (zona != null) emptyList() else listOfNotNull(punto) + cerca.orEmpty().take(6).map { it.lat to it.lon },
+                alTocarPunto = { id -> abrir(Capa.Paradero(id)) },
+                alMover = { c -> centroMapa = c },
+                abajo = abajo, pedido = pedido, centrarEn = punto,
+            )
+        },
+        sobreMapa = {
+            val c = centroMapa
+            val lejos = c != null && Ubicacion.enBogota(c.first, c.second) && (base == null || Ubicacion.metros(c, base) > 350)
+            AnimatedVisibility(lejos, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 64.dp), enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                Row(Modifier.clip(SuaveShape(20.dp)).background(LectorColors.Card).pressable { Tacto.alternar(true); zona = c; cerca = null; centroMapa = null }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Search, null, tint = LectorColors.Text, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Buscar en esta zona", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text)
                 }
             }
-        }
-        when {
-            !Ubicacion.permiso -> item("permiso") {
-                Tarjeta(Modifier.padding(horizontal = Margen).padding(top = 16.dp)) {
-                    Icon(Icons.Rounded.MyLocation, null, tint = LectorColors.Text, modifier = Modifier.size(26.dp))
-                    Spacer(Modifier.height(10.dp))
-                    Text("Paraderos cerca de ti", style = LectorType.Section, color = LectorColors.Text)
-                    Text("Usamos tu ubicación solo con la app abierta y sale del teléfono redondeada a una cuadra. No la guardamos.", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
-                    BotonExpresivo("Usar mi ubicación", Icons.Rounded.NearMe, { pedir.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }, estilo = EstiloBoton.RELLENO)
+        },
+        contenido = {
+            item("saludo") {
+                Column(Modifier.padding(horizontal = Margen)) {
+                    Text(saludo, style = LectorType.Hero, color = LectorColors.Text)
+                    Spacer(Modifier.height(8.dp))
+                    EstadoDatos(feed)
                 }
             }
-            yo != null && punto == null -> item("fuera") { Vacio("Estás fuera de Bogotá", "Busca un paradero o una ruta en Buscar.") }
-            error != null && cerca == null -> item("error") { Vacio("No pudimos cargar los paraderos", "Revisa tu conexión.", "Reintentar") { error = null; cerca = null } }
-            cerca == null -> item("cargando") { Seccion("Cerca de ti"); CargandoFilas() }
-            else -> {
-                item("lista-t") { Seccion("Cerca de ti") }
-                items(cerca.orEmpty(), key = { it.id }) { s -> FilaParadero(s, { abrir(Capa.Paradero(s.id)) }, Modifier.revelar("c" + s.id)) }
+            item("tullave") { AccesoTarjeta { abrir(Capa.Tarjeta) } }
+            if (Guardados.paraderos.isNotEmpty()) {
+                item("guardados-t") { Seccion("Tus paraderos") }
+                item("guardados") {
+                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Guardados.paraderos.forEach { g -> TarjetaGuardado(g) { abrir(Capa.Paradero(g.id)) } }
+                    }
+                }
             }
+            if (zona != null) item("zona") {
+                Row(Modifier.padding(horizontal = Margen).padding(top = 12.dp).clip(SuaveShape(14.dp)).background(LectorColors.Card).pressable { zona = null; cerca = null }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.MyLocation, null, tint = LectorColors.Text, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Viendo otra zona · volver a donde estoy", style = LectorType.Label, color = LectorColors.Text)
+                }
+            }
+            when {
+                base == null && !Ubicacion.permiso -> item("permiso") {
+                    Tarjeta(Modifier.padding(horizontal = Margen).padding(top = 16.dp)) {
+                        Icon(Icons.Rounded.MyLocation, null, tint = LectorColors.Text, modifier = Modifier.size(26.dp))
+                        Spacer(Modifier.height(10.dp))
+                        Text("Paraderos cerca de ti", style = LectorType.Section, color = LectorColors.Text)
+                        Text("Usamos tu ubicación solo para esto y sale del teléfono redondeada a una cuadra. También puedes mover el mapa y tocar «Buscar en esta zona».", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+                        BotonExpresivo("Usar mi ubicación", Icons.Rounded.NearMe, { pedir.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }, estilo = EstiloBoton.RELLENO)
+                    }
+                }
+                base == null && gpsApagado -> item("gps") {
+                    Vacio("Tu ubicación está apagada", "Enciéndela o mueve el mapa y toca «Buscar en esta zona».", "Abrir ajustes") {
+                        runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+                    }
+                }
+                base == null && yo != null -> item("fuera") { Vacio("Estás fuera de Bogotá", "Mueve el mapa a Bogotá o busca en Buscar.") }
+                base == null -> item("buscando") { Seccion("Buscando dónde estás…"); CargandoFilas(3) }
+                error && cerca == null -> item("error") { Vacio("No pudimos cargar los paraderos", "Revisa tu conexión.", "Reintentar") { intento++ } }
+                cerca == null -> item("cargando") { Seccion(if (zona != null) "En esta zona" else "Cerca de ti"); CargandoFilas() }
+                cerca!!.isEmpty() -> item("vacio") { Vacio("No hay paraderos aquí", "Prueba moviendo el mapa.") }
+                else -> {
+                    item("lista-t") { Seccion(if (zona != null) "En esta zona" else "Cerca de ti") }
+                    items(cerca.orEmpty(), key = { "c" + it.id }) { s -> FilaParadero(s, { abrir(Capa.Paradero(s.id)) }, Modifier.revelar("c" + s.id)) }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun AccesoTarjeta(onClick: () -> Unit) {
+    val saldo = UltimoSaldo.saldo
+    Row(
+        Modifier.padding(horizontal = Margen).padding(top = 14.dp).fillMaxWidth().clip(SuaveShape(22.dp)).background(LectorColors.Card)
+            .pressable(onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Contactless, null, tint = androidx.compose.material3.MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Tarjeta TuLlave", style = LectorType.Section, color = LectorColors.Text)
+            Text(if (saldo != null) "Último saldo ${pesos(saldo)} · toca para leerla de nuevo" else "Acércala al celular para ver el saldo", style = LectorType.Label, color = LectorColors.Muted)
         }
+        Icon(Icons.Rounded.ChevronRight, null, tint = LectorColors.Muted)
     }
 }
 
@@ -133,6 +195,7 @@ object Planeador {
     var hasta by mutableStateOf<Place?>(null)
     var dentroDe by mutableIntStateOf(0)
     var llegarA by mutableStateOf(false)
+    var claveRes: String? = null
     var accesible by mutableStateOf(false)
     var menosTransbordos by mutableStateOf(false)
     var resultado by mutableStateOf<PlanResult?>(null)
@@ -158,7 +221,9 @@ fun IrScreen(abrir: (Capa) -> Unit) {
         lugares = runCatching { Api.lugares(texto.trim(), origen?.first, origen?.second) }.getOrNull()
     }
     val hasta = Planeador.hasta
-    LaunchedEffect(origen?.let { "%.3f,%.3f".format(it.first, it.second) }, hasta?.id, Planeador.dentroDe, Planeador.llegarA, Planeador.accesible, Planeador.menosTransbordos, editando) {
+    var intento by remember { mutableIntStateOf(0) }
+    LaunchedEffect(hasta?.id, Planeador.desde?.id) { val k = "${hasta?.id}|${Planeador.desde?.id}"; if (Planeador.claveRes != k) { Planeador.resultado = null; Planeador.claveRes = k } }
+    LaunchedEffect(origen?.let { "%.3f,%.3f".format(it.first, it.second) }, hasta?.id, Planeador.dentroDe, Planeador.llegarA, Planeador.accesible, Planeador.menosTransbordos, editando, intento) {
         if (editando != null || hasta == null || origen == null) return@LaunchedEffect
         cargando = true; error = false
         val hora = if (Planeador.dentroDe > 0) java.time.OffsetDateTime.now().plusMinutes(Planeador.dentroDe.toLong()).toString() else null
@@ -232,7 +297,7 @@ fun IrScreen(abrir: (Capa) -> Unit) {
             val r = Planeador.resultado
             when {
                 origen == null -> item("sin") { Vacio("¿Desde dónde sales?", "Activa tu ubicación o elige el punto de partida.") }
-                error -> item("err") { Vacio("No pudimos planear el viaje", "Revisa tu conexión.", "Reintentar") { error = false; Planeador.dentroDe = Planeador.dentroDe } }
+                error -> item("err") { Vacio("No pudimos planear el viaje", "Revisa tu conexión.", "Reintentar") { error = false; intento++ } }
                 r == null -> item("carg") {
                     if (co.saerling.rutas.fx.fxOn("textshimmer")) co.saerling.rutas.fx.TextoBrillo("Buscando todas las rutas…", LectorType.Section, Modifier.padding(horizontal = Margen, vertical = 18.dp))
                     else Seccion("Buscando todas las rutas…")
@@ -264,7 +329,7 @@ fun IrScreen(abrir: (Capa) -> Unit) {
                                 Planeador.cargandoMas = true
                                 escena.launch {
                                     val o = origen
-                                    runCatching { Api.plan(o, hasta.lat to hasta.lon, cursor = r.next, accesible = Planeador.accesible, menosTransbordos = Planeador.menosTransbordos) }
+                                    runCatching { Api.plan(o, hasta.lat to hasta.lon, if (Planeador.dentroDe > 0) java.time.OffsetDateTime.now().plusMinutes(Planeador.dentroDe.toLong()).toString() else null, Planeador.llegarA, cursor = r.next, accesible = Planeador.accesible, menosTransbordos = Planeador.menosTransbordos) }
                                         .onSuccess { mas -> val n = nombrar(mas, Planeador.desde?.name ?: "Tu ubicación", hasta.name)
                                             Planeador.resultado = r.copy(itineraries = (r.itineraries + n.itineraries).distinctBy { x -> x.id }, next = n.next) }
                                         .onFailure { Avisos.mostrar("No pudimos cargar más opciones") }
@@ -285,7 +350,7 @@ private fun ordenar(lista: List<Itinerary>, modo: Int): List<Itinerary> = when (
     1 -> lista.sortedBy { it.end }
     2 -> lista.sortedWith(compareBy({ it.walkMetres }, { it.end }))
     3 -> lista.sortedWith(compareBy({ it.transfers }, { it.end }))
-    else -> lista.sortedBy { it.minutes + it.walkMetres / 120 + it.transfers * 6 + java.time.Duration.between(java.time.OffsetDateTime.now(), java.time.OffsetDateTime.parse(it.start)).toMinutes().coerceAtLeast(0) / 2 }
+    else -> lista.sortedBy { it.minutes + it.walkMetres / 120 + it.transfers * 6 + runCatching { java.time.Duration.between(java.time.OffsetDateTime.now(), java.time.OffsetDateTime.parse(it.start)).toMinutes().coerceAtLeast(0) / 2 }.getOrDefault(0L) }
 }
 
 /** La combinación de buses de un viaje (K309 › 1), para agrupar las salidas de la misma ruta. */

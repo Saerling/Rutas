@@ -26,7 +26,7 @@ enum class Superficie(val nombre: String) { CRISTAL("Cristal"), LIQUIDO("Liquid 
 enum class FondoApp(val nombre: String) { NEGRO("Liso"), AURORA("Aurora"), COLOR("Aurora de color") }
 
 /** Animación al abrir la app. */
-enum class AnimArranque(val nombre: String) { PUNTOS("Puntos"), AGUJERO("Agujero negro"), RAPIDA("Rápida"), NINGUNA("Ninguna") }
+enum class AnimArranque(val nombre: String) { PUNTOS("Puntos"), RAPIDA("Rápida"), NINGUNA("Ninguna") }
 
 /** Todas las opciones de aspecto en las que hemos trabajado, con sus valores guardados. */
 object Aspecto {

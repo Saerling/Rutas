@@ -108,6 +108,7 @@ fun RutasApp(almacen: Almacen, inicial: Pestana = Pestana.Cerca, capaInicial: Ca
                     is Capa.Viaje -> ViajeScreen(c.it, volver)
                     Capa.Personalizacion -> PersonalizacionScreen(almacen, volver)
                     Capa.BibliotecaFx -> co.saerling.rutas.fx.BibliotecaFxPantalla(remember { catalogoRutas() }, volver)
+                    Capa.Tarjeta -> TarjetaScreen(volver)
                     Capa.IrA -> Unit
                 }
             }

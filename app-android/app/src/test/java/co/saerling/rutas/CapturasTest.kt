@@ -83,6 +83,7 @@ class CapturasTest {
         capturar("07-viaje") { RutasApp(almacen, capaInicial = Capa.Viaje(plan.itineraries.first())) }
     }
     @Test fun personalizacion() = capturar("08-personalizacion") { RutasApp(almacen, capaInicial = Capa.Personalizacion) }
+    @Test fun tarjeta() = capturar("12-tarjeta") { RutasApp(almacen, capaInicial = Capa.Tarjeta) }
     @Test fun bibliotecaFx() = capturar("11-biblioteca-fx") { RutasApp(almacen, capaInicial = Capa.BibliotecaFx) }
     @Test fun cercaClaro() = capturar("09-cerca-claro", oscuro = false) { RutasApp(almacen) }
     @Test fun actualizacion() = capturar("10-actualizacion") {

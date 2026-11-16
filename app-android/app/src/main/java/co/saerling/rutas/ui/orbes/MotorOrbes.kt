@@ -15,15 +15,15 @@ class Fotograma(val puntos: List<Punto>, val lineas: List<Linea>)
 
 /** Los nueve estados de thinking-orbs. [etiqueta] = lo que lee TalkBack. */
 enum class EstadoOrbe(val modo: String, val etiqueta: String) {
-    WORKING("orbits", "Trabajando…"),
+    WORKING("orbits", "Calculando…"),
     SEARCHING("globe", "Buscando…"),
-    SOLVING("rubik", "Resolviendo…"),
-    LISTENING("wave", "Escuchando…"),
+    SOLVING("rubik", "Buscando rutas…"),
+    LISTENING("wave", "Sintonizando…"),
     CONNECTING("web", "Conectando…"),
-    WEAVING("braid", "Entrelazando…"),
-    COMPOSING("ribbon", "Componiendo…"),
-    BREATHING("ring", "Pensando…"),
-    SHAPING("morph", "Dando forma…"),
+    WEAVING("braid", "Uniendo trayectos…"),
+    COMPOSING("ribbon", "Armando el viaje…"),
+    BREATHING("ring", "Un momento…"),
+    SHAPING("morph", "Casi listo…"),
 }
 
 typealias Opciones = Map<String, Double>

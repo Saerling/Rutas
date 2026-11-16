@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        // Con un viaje guiado, el servicio sigue la ubicación; si no, se apaga al salir de la app.
         Ubicacion.parar(this)
     }
 
@@ -43,6 +44,8 @@ class MainActivity : ComponentActivity() {
         Aspecto.iniciar(applicationContext)
         co.saerling.rutas.ui.mochy.EstiloApp.iniciar(applicationContext)
         Guardados.iniciar(applicationContext)
+        co.saerling.rutas.ui.rutas.UltimoSaldo.iniciar(applicationContext)
+        co.saerling.rutas.data.GuiaServicio.crearCanales(applicationContext)
         almacen = Almacen.obtener(applicationContext)
         aplicarBarras(oscuro = almacen.modoTema != ModoTema.CLARO)
         if (savedInstanceState == null) NuevaVersion.alArrancar(applicationContext)

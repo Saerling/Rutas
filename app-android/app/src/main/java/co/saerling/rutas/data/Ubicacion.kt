@@ -25,6 +25,15 @@ object Ubicacion {
 
     private var escucha: LocationListener? = null
 
+    /** El servicio de viaje guiado también actualiza la ubicación (con la pantalla apagada). */
+    fun poner(p: Pair<Double, Double>) { actual = p }
+
+    /** Hay algún proveedor de ubicación encendido (GPS o red). */
+    fun gpsEncendido(c: Context): Boolean {
+        val lm = c.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER).any { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
+    }
+
     /** Empieza a seguir la ubicación (cada 5 s o 20 m). Llamar de nuevo no duplica nada. */
     @SuppressLint("MissingPermission")
     fun empezar(c: Context) {
@@ -35,10 +44,12 @@ object Ubicacion {
             .mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }.maxByOrNull { it.time }
         mejor?.let { actual = it.latitude to it.longitude }
         val l = LocationListener { loc: Location -> actual = loc.latitude to loc.longitude }
-        escucha = l
+        var alguno = false
         for (p in listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER)) {
-            if (runCatching { lm.isProviderEnabled(p) }.getOrDefault(false)) runCatching { lm.requestLocationUpdates(p, 5_000L, 20f, l, Looper.getMainLooper()) }
+            if (runCatching { lm.isProviderEnabled(p) }.getOrDefault(false)) alguno = runCatching { lm.requestLocationUpdates(p, 5_000L, 20f, l, Looper.getMainLooper()); true }.getOrDefault(false) || alguno
         }
+        // Si no había proveedor encendido no se marca como escuchando: al volver con el GPS prendido se intenta otra vez.
+        if (alguno) escucha = l
     }
 
     fun parar(c: Context) {

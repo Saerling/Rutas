@@ -46,7 +46,7 @@ private const val HORIZONTE = 17.6f / 108f
 fun LogoApp(modifier: Modifier = Modifier, conFondo: Boolean = true, agujero: Boolean = false) {
     Box(modifier) {
         if (conFondo) Canvas(Modifier.matchParentSize()) { drawCircle(Color.Black, radius = size.minDimension * 0.33f) }
-        Image(painterResource(if (agujero) R.drawable.ic_logo_agujero else R.drawable.ic_launcher_foreground), contentDescription = "Shiori", modifier = Modifier.matchParentSize())
+        Image(painterResource(if (agujero) R.drawable.ic_logo_agujero else R.drawable.ic_launcher_foreground), contentDescription = "Rutas", modifier = Modifier.matchParentSize())
     }
 }
 
@@ -65,7 +65,7 @@ fun ArranqueOverlay(alTerminar: () -> Unit) {
     if (Aspecto.arranque == AnimArranque.PUNTOS && !MovimientoReducido.activo) {
         val ctx = androidx.compose.ui.platform.LocalContext.current
         val tipo = remember { runCatching { androidx.core.content.res.ResourcesCompat.getFont(ctx, R.font.inter_bold) }.getOrNull() }
-        AperturaPuntos(PuntosIcono, "Shiori", tipo = tipo, alRevelar = { ArranqueRevelado.valor = it }, alTerminar = alTerminar)
+        AperturaPuntos(PuntosRutas, "Rutas", tipo = tipo, alRevelar = { ArranqueRevelado.valor = it }, alTerminar = alTerminar)
         return
     }
     val densidad = LocalDensity.current

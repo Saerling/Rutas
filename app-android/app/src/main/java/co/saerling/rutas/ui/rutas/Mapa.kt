@@ -8,12 +8,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import co.saerling.rutas.data.Bus
@@ -77,6 +80,13 @@ fun Mapa(
     yo: Pair<Double, Double>? = null,
     encuadrar: List<Pair<Double, Double>> = emptyList(),
     alTocarPunto: ((String) -> Unit)? = null,
+    /** Espacio que tapa la hoja de abajo: el encuadre y el logo de la cámara quedan por encima de ella. */
+    abajo: androidx.compose.ui.unit.Dp = 0.dp,
+    /** Cambia este número para volar a [centrarEn] (botón «mi ubicación»). */
+    pedido: Int = 0,
+    centrarEn: Pair<Double, Double>? = null,
+    /** Cuando el mapa se queda quieto tras moverlo el usuario: su centro. */
+    alMover: ((Pair<Double, Double>) -> Unit)? = null,
 ) {
     if (ModoPrueba.activo) { MapaFalso(modifier, puntos, tramos); return }
     val ctx = LocalContext.current
@@ -86,6 +96,10 @@ fun Mapa(
     var estilo by remember { mutableStateOf<Style?>(null) }
     val url = EstilosMapa.actual()
     val texto = if (TemaActual.oscuro) Color.White else Color(0xFF111114)
+    val movidoPorUsuario = remember { booleanArrayOf(false) }
+    val alMoverActual = rememberUpdatedState(alMover)
+    val alTocarActual = rememberUpdatedState(alTocarPunto)
+    val bajoPx = with(LocalDensity.current) { abajo.toPx().toInt() }
     val vista = remember {
         // TextureView: respeta las esquinas redondeadas y las animaciones de Mochy (un SurfaceView las ignora).
         MapView(ctx, org.maplibre.android.maps.MapLibreMapOptions.createFromAttributes(ctx).textureMode(true)).apply {
@@ -93,6 +107,17 @@ fun Mapa(
             getMapAsync { m ->
                 m.uiSettings.apply { isCompassEnabled = false; isRotateGesturesEnabled = false; isTiltGesturesEnabled = false; isAttributionEnabled = false; isLogoEnabled = false }
                 m.cameraPosition = org.maplibre.android.camera.CameraPosition.Builder().target(LatLng(centro.first, centro.second)).zoom(zoom).build()
+                // Escuchas una sola vez por mapa (no en cada cambio de estilo), con la acción más reciente.
+                m.addOnCameraMoveStartedListener { razon -> if (razon == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) movidoPorUsuario[0] = true }
+                m.addOnCameraIdleListener {
+                    if (movidoPorUsuario[0]) { movidoPorUsuario[0] = false; m.cameraPosition.target?.let { t -> alMoverActual.value?.invoke(t.latitude to t.longitude) } }
+                }
+                m.addOnMapClickListener { ll ->
+                    val f = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "puntos").firstOrNull()
+                    val id = f?.getStringProperty("id")
+                    val accion = alTocarActual.value
+                    if (id != null && accion != null) { accion(id); true } else false
+                }
                 mapa = m
             }
         }
@@ -136,12 +161,7 @@ fun Mapa(
             s.addLayer(CircleLayer("yo", "yo").withProperties(circleRadius(6.5f), circleColor(0xFF4C8DFF.toInt()), circleStrokeColor(Color.White.toArgb()), circleStrokeWidth(2.5f)))
             estilo = s
         }
-        m.addOnMapClickListener { ll ->
-            val toque = m.projection.toScreenLocation(ll)
-            val f = m.queryRenderedFeatures(toque, "puntos").firstOrNull()
-            val id = f?.getStringProperty("id")
-            if (id != null && alTocarPunto != null) { alTocarPunto(id); true } else false
-        }
+
     }
 
     LaunchedEffect(estilo, tramos) {
@@ -170,13 +190,21 @@ fun Mapa(
         val s = estilo ?: return@LaunchedEffect
         s.getSourceAs<GeoJsonSource>("yo")?.setGeoJson(FeatureCollection.fromFeatures(listOfNotNull(yo?.let { Feature.fromGeometry(Point.fromLngLat(it.second, it.first)) })))
     }
-    LaunchedEffect(mapa, encuadrar) {
+    // Se encuadra una vez por cada conjunto nuevo (otro paradero, otra ruta); moverse con el GPS no mueve la cámara.
+    val claveEncuadre = encuadrar.map { "%.4f,%.4f".format(it.first, it.second) }.distinct().sorted().joinToString("|")
+    LaunchedEffect(mapa, claveEncuadre) {
         val m = mapa ?: return@LaunchedEffect
         val pts = encuadrar.distinct()
         if (pts.size >= 2) {
             val b = LatLngBounds.Builder().apply { pts.forEach { include(LatLng(it.first, it.second)) } }.build()
-            runCatching { m.animateCamera(CameraUpdateFactory.newLatLngBounds(b, 60, 140, 60, 120), 650) }
+            runCatching { m.animateCamera(CameraUpdateFactory.newLatLngBounds(b, 90, 260, 90, bajoPx + 90), 650) }
         } else if (pts.size == 1) m.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(pts[0].first, pts[0].second), zoom), 650)
+    }
+    LaunchedEffect(mapa, bajoPx) { mapa?.setPadding(0, 0, 0, bajoPx) }
+    LaunchedEffect(pedido) {
+        val m = mapa ?: return@LaunchedEffect
+        val c = centrarEn ?: return@LaunchedEffect
+        if (pedido > 0) m.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(c.first, c.second), 16.0), 600)
     }
 
     AndroidView({ vista }, modifier)
