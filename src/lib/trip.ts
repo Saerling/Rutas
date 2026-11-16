@@ -6,6 +6,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { metresBetween } from "@/transit/path";
 import type { Itinerary, Leg, Place, PlanResult } from "@/transit/plan";
 
+import { t } from "@/i18n";
+
 import { ApiError, queryClient } from "./api";
 
 /** Like the rest of the app, coordinates leave the phone rounded to about a block. */
@@ -30,7 +32,17 @@ export interface PlanOptions {
 
 type Point = { lat: number; lon: number };
 
-export function usePlan(from: Point | null, to: Point | null, options: PlanOptions) {
+/** MOTIS calls the two ends START and END; the rider knows them as "your location" and the place they picked. */
+function named(plan: PlanResult, fromName: string, toName: string): PlanResult {
+  const fix = (n: string) => (n === "START" ? fromName : n === "END" ? toName : n);
+  const each = (it: Itinerary): Itinerary => ({
+    ...it,
+    legs: it.legs.map((l) => ({ ...l, from: { ...l.from, name: fix(l.from.name) }, to: { ...l.to, name: fix(l.to.name) } })),
+  });
+  return { itineraries: plan.itineraries.map(each), walk: plan.walk && each(plan.walk) };
+}
+
+export function usePlan(from: (Point & { name?: string }) | null, to: (Point & { name?: string }) | null, options: PlanOptions) {
   const params = from && to && {
     fromLat: round(from.lat),
     fromLon: round(from.lon),
@@ -43,7 +55,7 @@ export function usePlan(from: Point | null, to: Point | null, options: PlanOptio
   };
   return useQuery({
     queryKey: ["plan", params],
-    queryFn: () => get<PlanResult>(`/api/plan?${new URLSearchParams(params || {})}`),
+    queryFn: async () => named(await get<PlanResult>(`/api/plan?${new URLSearchParams(params || {})}`), from?.name ?? t().plan.here, to?.name ?? t().plan.to),
     enabled: !!params,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
