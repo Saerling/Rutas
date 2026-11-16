@@ -105,9 +105,13 @@ const fotos = new Map<string, Foto<unknown>>();
 function rt<T>(archivo: string, ttl: number, leer: (b: Uint8Array) => T): Promise<T> {
   const f = fotos.get(archivo) as Foto<T> | undefined;
   if (f && Date.now() - f.en < ttl) return f.dato;
-  const dato = fetch(RT + archivo, { signal: AbortSignal.timeout(10_000) })
+  const dato = fetch(RT + archivo, { signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "Mozilla/5.0 (Linux; Android 15) Rutas/0.2 (+https://github.com/Saerling/Rutas)", Accept: "*/*" } })
     .then(async (r) => {
-      if (!r.ok) throw new CromaError("feed_unavailable", `TransMilenio respondió ${r.status}.`, 502);
+      if (!r.ok) {
+        const cuerpo = (await r.text().catch(() => "")).slice(0, 160).replace(/\s+/g, " ");
+        console.error("[rt]", archivo, r.status, r.headers.get("server"), cuerpo);
+        throw new CromaError("feed_unavailable", `TransMilenio respondió ${r.status}.`, 502);
+      }
       return leer(new Uint8Array(await r.arrayBuffer()));
     })
     .catch((e) => {
