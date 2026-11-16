@@ -52,6 +52,8 @@ export interface PlanResult {
   itineraries: Itinerary[];
   /** Walking all the way, when it is short enough to be worth offering. */
   walk: Itinerary | null;
+  /** Cursor for the next page of options (later departures). */
+  next?: string | null;
 }
 
 /** Decodes a Google-style encoded polyline into [lon, lat] pairs. MOTIS sends them with 6 or 7 decimals. */

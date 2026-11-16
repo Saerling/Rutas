@@ -87,7 +87,8 @@ fun Mapa(
     val url = EstilosMapa.actual()
     val texto = if (TemaActual.oscuro) Color.White else Color(0xFF111114)
     val vista = remember {
-        MapView(ctx).apply {
+        // TextureView: respeta las esquinas redondeadas y las animaciones de Mochy (un SurfaceView las ignora).
+        MapView(ctx, org.maplibre.android.maps.MapLibreMapOptions.createFromAttributes(ctx).textureMode(true)).apply {
             onCreate(null)
             getMapAsync { m ->
                 m.uiSettings.apply { isCompassEnabled = false; isRotateGesturesEnabled = false; isTiltGesturesEnabled = false; isAttributionEnabled = false; isLogoEnabled = false }

@@ -45,7 +45,7 @@ object Api {
 
     suspend fun plan(
         desde: Pair<Double, Double>, hasta: Pair<Double, Double>, horaIso: String? = null,
-        llegarA: Boolean = false, accesible: Boolean = false, menosTransbordos: Boolean = false,
+        llegarA: Boolean = false, accesible: Boolean = false, menosTransbordos: Boolean = false, cursor: String? = null,
     ): PlanResult {
         val p = buildString {
             append("/api/plan?fromLat=${r(desde.first)}&fromLon=${r(desde.second)}&toLat=${r(hasta.first)}&toLon=${r(hasta.second)}")
@@ -53,6 +53,7 @@ object Api {
             if (llegarA) append("&arriveBy=1")
             if (accesible) append("&wheelchair=1")
             if (menosTransbordos) append("&maxTransfers=1")
+            if (cursor != null) append("&cursor=${q(cursor)}")
         }
         return get(p)
     }

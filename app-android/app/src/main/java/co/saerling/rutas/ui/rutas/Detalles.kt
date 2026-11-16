@@ -19,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.saerling.rutas.data.*
@@ -31,39 +33,62 @@ sealed interface Capa {
     data class Ruta(val id: String) : Capa
     data class Viaje(val it: Itinerary) : Capa
     data object Personalizacion : Capa
+    data object BibliotecaFx : Capa
     /** No es una página: pide ir a la pestaña Ir con el destino ya puesto. */
     data object IrA : Capa
 }
 
-/** Detalle con el mapa arriba y una hoja de Mochy debajo; botón atrás y acción en cristal sobre el mapa. */
+/**
+ * Detalle como en Moovit/Citymapper: el mapa arriba y una hoja que sube sobre él al hacer scroll. La hoja tiene su
+ * propio fondo (el mapa nunca se ve detrás del texto) y, cuando cubre el mapa, aparece una barra superior sólida.
+ */
 @Composable
 private fun DetalleConMapa(
     mapa: @Composable () -> Unit,
     onBack: () -> Unit,
     accion: (@Composable () -> Unit)? = null,
+    fijo: (@Composable () -> Unit)? = null,
     contenido: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
-    Box(Modifier.fillMaxSize().background(LectorColors.Bg)) {
-        Box(Modifier.fillMaxWidth().fillMaxHeight(0.42f)) { mapa() }
+    val estado = androidx.compose.foundation.lazy.rememberLazyListState()
+    val densidad = androidx.compose.ui.platform.LocalDensity.current
+    val altoMapa = (LocalContext.current.resources.displayMetrics.let { it.heightPixels / it.density } * 0.42f).dp
+    val fondo = LectorColors.Bg
+    // Cuánto subió la hoja: 0 con el mapa a la vista, 1 cuando la hoja llega arriba.
+    val cubierto by remember { derivedStateOf {
+        val hoja = estado.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "hoja" }
+        if (hoja == null) 1f else (1f - hoja.offset / with(densidad) { (altoMapa - 28.dp).toPx() }).coerceIn(0f, 1f)
+    } }
+    Box(Modifier.fillMaxSize().background(fondo)) {
+        Box(Modifier.fillMaxWidth().height(altoMapa).graphicsLayer { translationY = -cubierto * 120f }) { mapa() }
         LazyColumn(
-            Modifier.fillMaxSize(),
+            Modifier.fillMaxSize().drawBehind {
+                val hoja = estado.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "hoja" }
+                val arriba = when { hoja != null -> hoja.offset.toFloat() + 29.dp.toPx(); estado.firstVisibleItemIndex > 1 -> 0f; else -> size.height }
+                drawRect(fondo, topLeft = androidx.compose.ui.geometry.Offset(0f, arriba), size = androidx.compose.ui.geometry.Size(size.width, size.height - arriba))
+            },
+            state = estado,
             contentPadding = PaddingValues(bottom = 48.dp),
         ) {
-            item("hueco") { Spacer(Modifier.fillMaxWidth().height(LocalContext.current.resources.displayMetrics.let { (it.heightPixels / it.density * 0.42f).dp - 28.dp })) }
+            item("hueco") { Spacer(Modifier.fillMaxWidth().height(altoMapa - 28.dp)) }
             item("hoja") {
                 // La hoja que sube sobre el mapa: esquinas de arriba redondas y el asa de Mochy.
-                Box(Modifier.fillMaxWidth().height(30.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)).background(LectorColors.Bg), Alignment.Center) {
+                Box(Modifier.fillMaxWidth().height(30.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)).background(fondo), Alignment.Center) {
                     Box(Modifier.size(36.dp, 4.dp).clip(SuaveShape(2.dp)).background(LectorColors.PillFill))
                 }
             }
             contenido()
         }
-        Row(Modifier.statusBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth()) {
-            Box(Modifier.size(44.dp).clip(SuaveShape(15.dp)).background(LectorColors.Glass).pressable(onBack), Alignment.Center) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text)
+        // Barra superior: transparente sobre el mapa, sólida cuando la hoja la alcanza.
+        Column(Modifier.fillMaxWidth().background(fondo.copy(alpha = ((cubierto - 0.85f) / 0.15f).coerceIn(0f, 1f)))) {
+            Row(Modifier.statusBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(44.dp).clip(SuaveShape(15.dp)).background(LectorColors.Glass).pressable(onBack), Alignment.Center) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text)
+                }
+                Spacer(Modifier.weight(1f))
+                accion?.invoke()
             }
-            Spacer(Modifier.weight(1f))
-            accion?.invoke()
+            fijo?.invoke()
         }
     }
 }
@@ -270,16 +295,20 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
         }
     }
     LaunchedEffect(Unit) { Ubicacion.empezar(ctx) }
-    DetalleConMapa(
+    val confeti = co.saerling.rutas.fx.rememberConfeti()
+    LaunchedEffect(guia) { if (guia is Guia.Llegaste && co.saerling.rutas.fx.Fx.on("confetti")) { Tacto.alternar(true); confeti.disparar() } }
+    Box { DetalleConMapa(
         mapa = {
             Mapa(
                 Modifier.fillMaxSize(), centro = it.legs.first().from.let { s -> s.lat to s.lon }, zoom = 13.0,
                 puntos = it.legs.filter { l -> l.mode == "transit" }.flatMapIndexed { k, l -> listOf(PuntoMapa("a$k", l.from.lat, l.from.lon, true), PuntoMapa("b$k", l.to.lat, l.to.lon, true)) },
                 tramos = it.legs.map { l -> TramoMapa(l.path, if (l.mode == "transit") colorSistema(l.system) else LectorColors.Muted, discontinuo = l.mode != "transit") },
-                yo = yo, encuadrar = it.legs.flatMap { l -> listOf(l.from.lat to l.from.lon, l.to.lat to l.to.lon) },
+                yo = yo, encuadrar = if (guiando && yo != null) listOf(yo) else it.legs.flatMap { l -> listOf(l.from.lat to l.from.lon, l.to.lat to l.to.lon) },
             )
         },
         onBack = onBack,
+        // Mientras viajas, la guía queda fija arriba, como en Moovit: siempre a la vista aunque bajes por los pasos.
+        fijo = if (guiando) { { TarjetaGuia(it, guia) { Tacto.alternar(false); guiando = false } } } else null,
     ) {
         item("t") {
             Column(Modifier.padding(horizontal = Margen)) {
@@ -288,30 +317,14 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
                 val p = it.pasaje()
                 if (p > 0) Text("Pasaje aproximado ${pesos(p)} (sin descuentos de transbordo)", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp))
                 Spacer(Modifier.height(16.dp))
-                BotonExpresivo(if (guiando) "Terminar viaje" else "Empezar viaje", if (guiando) Icons.Rounded.Stop else Icons.Rounded.Navigation, {
-                    Tacto.alternar(!guiando); guiando = !guiando
-                    if (guiando) Avisos.mostrar("Te avisamos cuando debas bajarte. Deja la app abierta.")
-                }, Modifier.fillMaxWidth(), estilo = if (guiando) EstiloBoton.TONAL else EstiloBoton.RELLENO, alto = 54.dp)
-            }
-        }
-        if (guiando) item("guia") {
-            val (texto, urgente) = when (guia) {
-                Guia.Esperando -> "Buscando tu ubicación…" to false
-                Guia.Llegaste -> "Llegaste. ¡Buen viaje!" to false
-                is Guia.Caminando -> "Camina hasta ${it.legs[guia.tramo].to.name} · faltan ${guia.metros} m" to false
-                is Guia.EnBus -> if (guia.bajarYa) "Bájate en la próxima: ${it.legs[guia.tramo].to.name}" to true
-                    else "Faltan ${guia.faltan} paradas · bájate en ${it.legs[guia.tramo].to.name}" to false
-            }
-            Tarjeta(Modifier.padding(horizontal = Margen).padding(top = 12.dp), radio = 24.dp, color = if (urgente) MaterialTheme.colorScheme.primary else LectorColors.CardHigh) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    PuntoVivo()
-                    Spacer(Modifier.width(10.dp))
-                    Text(texto, style = LectorType.Section, color = if (urgente) MaterialTheme.colorScheme.onPrimary else LectorColors.Text)
-                }
+                if (!guiando) BotonExpresivo("Empezar viaje", Icons.Rounded.Navigation, {
+                    Tacto.alternar(true); guiando = true
+                    Avisos.mostrar("Te avisamos cuando debas bajarte. Deja la app abierta.")
+                }, Modifier.fillMaxWidth(), estilo = EstiloBoton.RELLENO, alto = 54.dp)
             }
         }
         item("pasos") { Seccion("Paso a paso") }
-        items(it.legs.size) { i ->
+        items(it.legs.size, key = { i -> "paso$i" }) { i ->
             val l = it.legs[i]
             val actual = guia.let { g -> (g is Guia.EnBus && g.tramo == i) || (g is Guia.Caminando && g.tramo == i) }
             PasoViaje(l, actual, Modifier.revelar("paso" + it.id + i, i * 40))
@@ -322,6 +335,37 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
                 Spacer(Modifier.width(10.dp))
                 Text("Llegas a ${it.legs.last().to.name}", style = LectorType.Section, color = LectorColors.Text)
             }
+        }
+    }
+    co.saerling.rutas.fx.Confeti(confeti, Modifier.matchParentSize()) }
+}
+
+@Composable
+private fun TarjetaGuia(it: Itinerary, guia: Guia, terminar: () -> Unit) {
+    val (titulo, detalle, urgente) = when (guia) {
+        Guia.Esperando -> Triple("Buscando tu ubicación…", "Activa la ubicación para que te avisemos.", false)
+        Guia.Llegaste -> Triple("Llegaste", "¡Buen viaje!", false)
+        is Guia.Caminando -> Triple("Camina hasta ${it.legs[guia.tramo].to.name}", "Faltan ${guia.metros} m", false)
+        is Guia.EnBus -> {
+            val l = it.legs[guia.tramo]
+            if (guia.bajarYa) Triple("Bájate en la próxima", l.to.name, true)
+            else Triple("${guia.faltan} paradas", "En el ${codigoVisible(l.code, l.headsign)} · bájate en ${l.to.name}", false)
+        }
+    }
+    val acento = MaterialTheme.colorScheme.primary
+    Row(
+        Modifier.padding(horizontal = 14.dp).padding(bottom = 10.dp).fillMaxWidth().clip(SuaveShape(24.dp))
+            .background(if (urgente) acento else LectorColors.CardHigh).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PuntoVivo()
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(titulo, style = LectorType.Hero, color = if (urgente) MaterialTheme.colorScheme.onPrimary else LectorColors.Text)
+            Text(detalle, style = LectorType.Body, color = if (urgente) MaterialTheme.colorScheme.onPrimary else LectorColors.Muted, maxLines = 2)
+        }
+        Box(Modifier.size(42.dp).clip(SuaveShape(14.dp)).background(LectorColors.PillFill).pressable(terminar), Alignment.Center) {
+            Icon(Icons.Rounded.Close, "Terminar viaje", tint = if (urgente) MaterialTheme.colorScheme.onPrimary else LectorColors.Text)
         }
     }
 }
@@ -337,28 +381,38 @@ private val GIROS = mapOf(
 @Composable
 private fun PasoViaje(l: Leg, actual: Boolean, modifier: Modifier) {
     val color = if (l.mode == "transit") colorSistema(l.system) else LectorColors.Muted
-    Row(modifier.fillMaxWidth().padding(horizontal = Margen, vertical = 8.dp)) {
-        Column(Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            if (l.mode == "transit") Insignia(l.code ?: "?", l.system) else Icon(Icons.AutoMirrored.Rounded.DirectionsWalk, null, tint = LectorColors.Muted)
+    var abierto by remember { mutableStateOf(false) }
+    Row(modifier.fillMaxWidth().padding(horizontal = Margen, vertical = 8.dp).height(IntrinsicSize.Min)) {
+        Column(Modifier.width(64.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (l.mode == "transit") Insignia(codigoVisible(l.code, l.headsign), l.system) else Icon(Icons.AutoMirrored.Rounded.DirectionsWalk, null, tint = LectorColors.Muted)
             Spacer(Modifier.height(6.dp))
-            Box(Modifier.width(3.dp).height(if (l.mode == "transit") 70.dp else 40.dp).clip(SuaveShape(2.dp)).background(color.copy(alpha = if (l.mode == "transit") 1f else 0.4f)))
+            Box(Modifier.width(if (l.mode == "transit") 4.dp else 3.dp).weight(1f).clip(SuaveShape(2.dp)).background(color.copy(alpha = if (l.mode == "transit") 1f else 0.35f)))
         }
         Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f).then(if (actual) Modifier.clip(SuaveShape(18.dp)).background(LectorColors.CardHigh).padding(10.dp) else Modifier)) {
+        Column(Modifier.weight(1f).clip(SuaveShape(18.dp)).background(if (actual) LectorColors.CardHigh else androidx.compose.ui.graphics.Color.Transparent).padding(if (actual) 10.dp else 0.dp)) {
             if (l.mode == "transit") {
-                Text("Toma el ${l.code}${l.headsign?.let { " hacia $it" } ?: ""}", style = LectorType.Section, color = LectorColors.Text)
+                val destino = destinoVisible(l)
+                Text("Toma el ${codigoVisible(l.code, l.headsign)}${destino?.let { " hacia $it" } ?: ""}", style = LectorType.Section, color = LectorColors.Text)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                     if (l.live) { PuntoVivo(7.dp); Spacer(Modifier.width(6.dp)) }
-                    Text("${l.from.name} · sale ${hora(l.start)} · ${if (l.live) "en vivo" else "según horario"}", style = LectorType.Label, color = LectorColors.Muted)
+                    Text("En ${l.from.name} · ${hora(l.start)} · ${if (l.live) "en vivo" else "según horario"}", style = LectorType.Label, color = LectorColors.Muted)
                 }
-                Text("${l.stops.size + 1} paradas · ${duracion(l.minutes)}", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 2.dp))
+                Row(Modifier.padding(top = 6.dp).clip(SuaveShape(10.dp)).pressable { abierto = !abierto }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${l.stops.size + 1} paradas · ${duracion(l.minutes)}", style = LectorType.Label, color = LectorColors.Text)
+                    Icon(if (abierto) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, if (abierto) "Ocultar paradas" else "Ver paradas", tint = LectorColors.Muted, modifier = Modifier.size(18.dp))
+                }
+                androidx.compose.animation.AnimatedVisibility(abierto) {
+                    Column(Modifier.padding(top = 4.dp)) {
+                        l.stops.forEach { p -> Text("· ${p.name}", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(vertical = 2.dp)) }
+                    }
+                }
                 Text("Bájate en ${l.to.name}", style = LectorType.Section.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text, modifier = Modifier.padding(top = 6.dp))
             } else {
                 Text("Camina hasta ${l.to.name}", style = LectorType.Section, color = LectorColors.Text)
                 Text("${duracion(l.minutes)} · ${(l.metres ?: 0.0).toInt()} m", style = LectorType.Label, color = LectorColors.Muted)
-                l.steps.take(6).forEach { s ->
+                l.pasosLimpios().take(5).forEach { s ->
                     val giro = GIROS[s.turn] ?: "Sigue derecho"
-                    Text(if (s.street.isNotBlank()) "$giro por ${s.street}, ${s.metres} m" else "$giro, ${s.metres} m", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 2.dp))
+                    Text(if (s.street.isNotBlank()) "$giro por ${s.street} · ${s.metres} m" else "$giro · ${s.metres} m", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 2.dp))
                 }
             }
         }

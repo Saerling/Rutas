@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import co.saerling.rutas.data.Api
 import co.saerling.rutas.data.Guardados
 import co.saerling.rutas.data.PlanResult
@@ -60,7 +61,8 @@ class CapturasTest {
                 Box(Modifier.fillMaxSize().background(LectorColors.Bg)) { contenido() }
             }
         }
-        repeat(24) { rule.mainClock.advanceTimeBy(250); Thread.sleep(150) }
+        // Los datos llegan en otro hilo: se espera y luego se dibuja un fotograma, así la captura ve lo último.
+        repeat(24) { Thread.sleep(150); rule.mainClock.advanceTimeBy(250) }
         rule.onRoot().captureRoboImage("build/capturas/$nombre.png")
     }
 
@@ -81,6 +83,7 @@ class CapturasTest {
         capturar("07-viaje") { RutasApp(almacen, capaInicial = Capa.Viaje(plan.itineraries.first())) }
     }
     @Test fun personalizacion() = capturar("08-personalizacion") { RutasApp(almacen, capaInicial = Capa.Personalizacion) }
+    @Test fun bibliotecaFx() = capturar("11-biblioteca-fx") { RutasApp(almacen, capaInicial = Capa.BibliotecaFx) }
     @Test fun cercaClaro() = capturar("09-cerca-claro", oscuro = false) { RutasApp(almacen) }
     @Test fun actualizacion() = capturar("10-actualizacion") {
         co.saerling.rutas.ui.mochy.HojaActualizacion(

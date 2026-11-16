@@ -63,7 +63,7 @@ const itinerary = z.object({
   legs: z.array(leg),
 });
 
-const planResponse = z.object({ itineraries: z.array(itinerary), direct: z.array(itinerary).optional() });
+const planResponse = z.object({ itineraries: z.array(itinerary), direct: z.array(itinerary).optional(), nextPageCursor: z.string().optional() });
 
 const match = z.object({
   type: z.string(),
@@ -104,7 +104,8 @@ function toLeg(l: z.infer<typeof leg>): Leg {
 function toItinerary(it: z.infer<typeof itinerary>, index: number): Itinerary {
   const legs = it.legs.map(toLeg);
   return {
-    id: `${Date.parse(it.startTime)}-${index}`,
+    // Same departure and same chain of buses is the same option, on any page.
+    id: `${Date.parse(it.startTime)}-${legs.map((l) => l.code ?? (l.mode === "walk" ? "p" : l.mode)).join(".")}-${index === 99 ? "pie" : ""}`,
     start: it.startTime,
     end: it.endTime,
     minutes: Math.max(1, Math.round(it.duration / 60)),
@@ -122,6 +123,7 @@ export interface PlanInput {
   arriveBy?: boolean;
   wheelchair?: boolean;
   maxTransfers?: number;
+  cursor?: string;
 }
 
 const planCache = cached<PlanResult>(60_000);
@@ -130,7 +132,9 @@ export function plan(input: PlanInput): Promise<PlanResult> {
   const params: Record<string, string> = {
     fromPlace: `${input.from.lat},${input.from.lon}`,
     toPlace: `${input.to.lat},${input.to.lon}`,
-    numItineraries: "5",
+    // Moovit-style: many options over a wide window, so riders see every way there, not just the first few.
+    numItineraries: "10",
+    searchWindow: "5400",
     directModes: "WALK",
     maxDirectTime: "2700",
     language: "es",
@@ -139,10 +143,11 @@ export function plan(input: PlanInput): Promise<PlanResult> {
   if (input.arriveBy) params.arriveBy = "true";
   if (input.wheelchair) params.pedestrianProfile = "WHEELCHAIR";
   if (input.maxTransfers != null) params.maxTransfers = String(input.maxTransfers);
+  if (input.cursor) params.pageCursor = input.cursor;
   return planCache(JSON.stringify(params), async () => {
     const data = await motis("/api/v5/plan", params, planResponse);
     const direct = data.direct?.[0];
-    return { itineraries: data.itineraries.map(toItinerary), walk: direct ? toItinerary(direct, 99) : null };
+    return { itineraries: data.itineraries.map(toItinerary), walk: direct ? toItinerary(direct, 99) : null, next: data.nextPageCursor ?? null };
   });
 }
 

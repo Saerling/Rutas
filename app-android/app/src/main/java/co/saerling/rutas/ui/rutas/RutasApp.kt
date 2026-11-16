@@ -22,6 +22,8 @@ import co.saerling.rutas.Almacen
 import co.saerling.rutas.ui.*
 import co.saerling.rutas.ui.mochy.AppNavigationBar
 import co.saerling.rutas.ui.mochy.NavItem
+import co.saerling.rutas.fx.fx
+import co.saerling.rutas.fx.noise
 
 /** Las cinco pestañas. Ajustes queda en la esquina, como en Shiori. */
 enum class Pestana(val label: String, val activo: ImageVector, val apagado: ImageVector) {
@@ -105,6 +107,7 @@ fun RutasApp(almacen: Almacen, inicial: Pestana = Pestana.Cerca, capaInicial: Ca
                     is Capa.Ruta -> RutaScreen(c.id, abrir, volver)
                     is Capa.Viaje -> ViajeScreen(c.it, volver)
                     Capa.Personalizacion -> PersonalizacionScreen(almacen, volver)
+                    Capa.BibliotecaFx -> co.saerling.rutas.fx.BibliotecaFxPantalla(remember { catalogoRutas() }, volver)
                     Capa.IrA -> Unit
                 }
             }
@@ -122,6 +125,7 @@ fun RutasApp(almacen: Almacen, inicial: Pestana = Pestana.Cerca, capaInicial: Ca
                 selectedIndex = pestana.ordinal,
                 onItemClick = { i, _ -> Tacto.tic(); pestana = Pestana.entries[i] },
                 modifier = Modifier.navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 8.dp).widthIn(max = 520.dp),
+                clipped = Modifier.fx("noise") { noise(.07f) },
             )
         }
         AvisosHost(Modifier.align(Alignment.TopCenter))

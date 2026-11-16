@@ -18,6 +18,7 @@ export function GET(request: Request) {
         time: time ?? undefined,
         arriveBy: q.get("arriveBy") === "1",
         wheelchair: q.get("wheelchair") === "1",
+        cursor: q.get("cursor")?.slice(0, 500) || undefined,
         maxTransfers: transfers != null && /^\d$/.test(transfers) ? Number(transfers) : undefined,
       }),
     30,

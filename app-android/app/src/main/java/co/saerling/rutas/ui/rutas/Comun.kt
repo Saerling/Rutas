@@ -41,6 +41,7 @@ import co.saerling.rutas.data.Arrival
 import co.saerling.rutas.data.Stop
 import co.saerling.rutas.ui.*
 import co.saerling.rutas.ui.mochy.revealOnAppear
+import co.saerling.rutas.fx.pulso
 
 /** Margen lateral de las páginas, el de Mochy. */
 val Margen = 20.dp
@@ -124,14 +125,12 @@ fun Minutos(a: Arrival, grande: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (vivo) PuntoVivo()
         Spacer(Modifier.width(6.dp))
-        AnimatedContent(a.minutes, transitionSpec = {
-            (slideInVertically { it / 2 } + fadeIn(tween(220))) togetherWith (slideOutVertically { -it / 2 } + fadeOut(tween(160)))
-        }, label = "min") { m ->
-            Text(
-                when { m == null -> "—"; m <= 0 -> "Ya"; else -> "$m min" },
-                style = if (grande) LectorType.Hero else LectorType.Section, color = LectorColors.Text, fontWeight = FontWeight.Bold,
-            )
-        }
+        val estilo = (if (grande) LectorType.Hero else LectorType.Section).copy(fontWeight = FontWeight.Bold)
+        val m = a.minutes
+        // NumberFlow (biblioteca de animaciones): cada dígito rueda al cambiar, como un marcador.
+        if (m != null && m > 0 && co.saerling.rutas.fx.fxOn("slidingnumber")) co.saerling.rutas.fx.NumeroFlow(m, estilo, color = LectorColors.Text, sufijo = " min")
+        else if (m != null && m > 0) Text("$m min", style = estilo, color = LectorColors.Text)
+        else Text(if (m == null) "—" else "Ya", style = estilo, color = LectorColors.Text)
     }
 }
 
@@ -140,7 +139,9 @@ fun Minutos(a: Arrival, grande: Boolean = false) {
 fun PuntoVivo(tam: Dp = 8.dp) {
     val t = rememberInfiniteTransition(label = "vivo")
     val a by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
-    Box(Modifier.size(tam).graphicsLayer { alpha = if (Mov.reducido) 1f else a }.clip(CircleShape).background(Color(0xFF34C759)))
+    val verde = Color(0xFF34C759)
+    Box(Modifier.size(tam).then(if (co.saerling.rutas.fx.fxOn("pulsating") && !Mov.reducido) Modifier.pulso(verde, tam) else Modifier)
+        .graphicsLayer { alpha = if (Mov.reducido) 1f else a }.clip(CircleShape).background(verde))
 }
 
 /** Fila de paradero o estación: icono, nombre, distancia y las rutas que pasan. */
@@ -165,9 +166,11 @@ fun FilaParadero(s: Stop, onClick: () -> Unit, modifier: Modifier = Modifier) {
             }
             if (s.routes.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    s.routes.take(5).forEach { Insignia(it.code, it.system) }
-                    if (s.routes.size > 5) Text("+${s.routes.size - 5}", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.align(Alignment.CenterVertically))
+                // Las insignias bajan de línea en vez de salirse de la fila.
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    s.routes.take(8).forEach { Insignia(it.code, it.system) }
+                    if (s.routes.size > 8) Text("+${s.routes.size - 8}", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.align(Alignment.CenterVertically))
                 }
             }
         }

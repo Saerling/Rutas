@@ -68,7 +68,38 @@ import kotlinx.serialization.Serializable
     val live: Boolean = false, val legs: List<Leg>,
 )
 
-@Serializable data class PlanResult(val itineraries: List<Itinerary> = emptyList(), val walk: Itinerary? = null)
+@Serializable data class PlanResult(val itineraries: List<Itinerary> = emptyList(), val walk: Itinerary? = null, val next: String? = null)
+
+/**
+ * TransMilenio publica las rutas SITP en pareja con un solo código (DK211 = D211 y K211). Se muestra la que lleva el
+ * letrero del bus (su destino); si no se sabe, las dos, como en Cerca.
+ */
+fun codigoVisible(code: String?, destino: String? = null): String {
+    val c = code?.trim()?.uppercase() ?: return "?"
+    val m = Regex("^([A-Z])([A-Z])(\\d{2,4}[A-Z]?)$").find(c) ?: return c
+    val (a, b, n) = m.destructured
+    val d = destino?.trim()?.uppercase()
+    return when (d) { "$a$n" -> "$a$n"; "$b$n" -> "$b$n"; else -> "$b$n·$a$n" }
+}
+
+/** El destino que se escribe tras «hacia», sin repetir el propio código. */
+fun destinoVisible(l: Leg): String? {
+    val d = l.headsign?.trim().orEmpty()
+    if (d.isEmpty()) return null
+    val code = l.code?.trim()?.uppercase().orEmpty()
+    return if (d.uppercase() == code || d.uppercase() == codigoVisible(code, d)) null else d
+}
+
+/** Pasos a pie más legibles: une los seguidos por la misma calle y quita los de pocos metros. */
+fun Leg.pasosLimpios(): List<Step> {
+    val out = mutableListOf<Step>()
+    for (s in steps) {
+        val prev = out.lastOrNull()
+        if (prev != null && (s.turn == "CONTINUE" || s.turn == prev.turn) && s.street == prev.street) out[out.lastIndex] = prev.copy(metres = prev.metres + s.metres)
+        else out += s
+    }
+    return out.filter { it.metres >= 25 || it.turn != "CONTINUE" }
+}
 
 /** Tarifa única del SITP en 2026 (troncal, zonal y TransMiCable). */
 const val PASAJE_COP = 3550

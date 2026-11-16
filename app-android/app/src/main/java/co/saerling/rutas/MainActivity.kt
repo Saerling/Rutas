@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         co.saerling.rutas.fx.Fx.init(this)
+        co.saerling.rutas.ui.rutas.encenderFxIniciales(this)
         MovimientoReducido.actualizar()
         Tacto.iniciar(window.decorView)
         Aspecto.iniciar(applicationContext)

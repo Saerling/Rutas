@@ -30,7 +30,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.saerling.rutas.data.*
 import co.saerling.rutas.ui.*
+import co.saerling.rutas.fx.inclinar
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.LocalTime
 
 // ───────────────────────────────────────── Cerca ─────────────────────────────────────────
@@ -134,6 +136,8 @@ object Planeador {
     var accesible by mutableStateOf(false)
     var menosTransbordos by mutableStateOf(false)
     var resultado by mutableStateOf<PlanResult?>(null)
+    var orden by mutableIntStateOf(0)
+    var cargandoMas by mutableStateOf(false)
 }
 
 @Composable
@@ -146,6 +150,7 @@ fun IrScreen(abrir: (Capa) -> Unit) {
     var cargando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf(false) }
     val origen = Planeador.desde?.let { it.lat to it.lon } ?: Ubicacion.actual
+    val escena = rememberCoroutineScope()
 
     LaunchedEffect(texto) {
         if (texto.trim().length < 2) { lugares = null; return@LaunchedEffect }
@@ -220,7 +225,7 @@ fun IrScreen(abrir: (Capa) -> Unit) {
                     ChipSel("Ahora", Planeador.dentroDe == 0) { Planeador.dentroDe = 0; Planeador.llegarA = false }
                     listOf(15, 30, 60).forEach { m -> ChipSel(if (m < 60) "En $m min" else "En 1 h", Planeador.dentroDe == m) { Planeador.dentroDe = m } }
                     if (Planeador.dentroDe > 0) ChipSel("Llegar a esa hora", Planeador.llegarA) { Planeador.llegarA = !Planeador.llegarA }
-                    ChipSel("Menos transbordos", Planeador.menosTransbordos) { Planeador.menosTransbordos = !Planeador.menosTransbordos }
+                    ChipSel("Máximo 1 transbordo", Planeador.menosTransbordos) { Planeador.menosTransbordos = !Planeador.menosTransbordos }
                     ChipSel("Accesible", Planeador.accesible) { Planeador.accesible = !Planeador.accesible }
                 }
             }
@@ -228,13 +233,45 @@ fun IrScreen(abrir: (Capa) -> Unit) {
             when {
                 origen == null -> item("sin") { Vacio("¿Desde dónde sales?", "Activa tu ubicación o elige el punto de partida.") }
                 error -> item("err") { Vacio("No pudimos planear el viaje", "Revisa tu conexión.", "Reintentar") { error = false; Planeador.dentroDe = Planeador.dentroDe } }
-                r == null -> item("carg") { Seccion("Buscando rutas…"); CargandoFilas(3) }
+                r == null -> item("carg") {
+                    if (co.saerling.rutas.fx.fxOn("textshimmer")) co.saerling.rutas.fx.TextoBrillo("Buscando todas las rutas…", LectorType.Section, Modifier.padding(horizontal = Margen, vertical = 18.dp))
+                    else Seccion("Buscando todas las rutas…")
+                    CargandoFilas(3)
+                }
                 r != null && r.itineraries.isEmpty() && r.walk == null -> item("nada") { Vacio("No encontramos cómo llegar", "Prueba con otra hora o un punto más cerca de una estación.") }
                 r != null -> {
-                    item("res-t") { Seccion(if (cargando) "Actualizando…" else "Formas de llegar") }
-                    val ordenadas = r.itineraries.sortedBy { it.end }
-                    items(ordenadas, key = { it.id }) { it2 -> TarjetaViaje(it2, it2 == ordenadas.first(), Modifier.revelar("v" + it2.id + it2.start)) { abrir(Capa.Viaje(it2)) } }
+                    item("orden") {
+                        // Segmented Control deslizante (Motion Primitives) para ordenar, como los filtros de Moovit.
+                        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides LectorColors.Text) {
+                            Box(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen).padding(top = 16.dp)) {
+                                co.saerling.rutas.fx.SegmentadoDeslizante(
+                                    listOf("Mejor", "Más rápido", "Menos a pie", "Menos transbordos"), Planeador.orden, { Tacto.tic(); Planeador.orden = it },
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                    item("res-t") { Seccion(if (cargando) "Actualizando…" else "${r.itineraries.size} formas de llegar") }
+                    val ordenadas = ordenar(r.itineraries, Planeador.orden)
+                    val mejor = ordenadas.firstOrNull()
+                    items(ordenadas, key = { it.id }) { it2 -> TarjetaViaje(it2, it2 == mejor, Modifier.revelar("v" + it2.id)) { abrir(Capa.Viaje(it2)) } }
                     r.walk?.let { w -> item("pie") { TarjetaViaje(w, false) { abrir(Capa.Viaje(w)) } } }
+                    if (r.next != null) item("mas") {
+                        Box(Modifier.fillMaxWidth().padding(top = 10.dp), Alignment.Center) {
+                            if (Planeador.cargandoMas) co.saerling.rutas.fx.Girador(color = androidx.compose.material3.MaterialTheme.colorScheme.primary)
+                            else BotonExpresivo("Ver más opciones", Icons.Rounded.ExpandMore, {
+                                Planeador.cargandoMas = true
+                                escena.launch {
+                                    val o = origen
+                                    runCatching { Api.plan(o, hasta.lat to hasta.lon, cursor = r.next, accesible = Planeador.accesible, menosTransbordos = Planeador.menosTransbordos) }
+                                        .onSuccess { mas -> val n = nombrar(mas, Planeador.desde?.name ?: "Tu ubicación", hasta.name)
+                                            Planeador.resultado = r.copy(itineraries = (r.itineraries + n.itineraries).distinctBy { x -> x.id }, next = n.next) }
+                                        .onFailure { Avisos.mostrar("No pudimos cargar más opciones") }
+                                    Planeador.cargandoMas = false
+                                }
+                            }, estilo = EstiloBoton.TONAL)
+                        }
+                    }
                     item("credito") { Text("Rutas planeadas con Transitous y datos abiertos de TransMilenio.", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(horizontal = Margen, vertical = 14.dp)) }
                 }
             }
@@ -242,10 +279,18 @@ fun IrScreen(abrir: (Capa) -> Unit) {
     }
 }
 
+/** Orden como en Moovit. «Mejor» pesa lo que tarda, lo que caminas y los transbordos; las otras ordenan por una sola cosa. */
+private fun ordenar(lista: List<Itinerary>, modo: Int): List<Itinerary> = when (modo) {
+    1 -> lista.sortedBy { it.end }
+    2 -> lista.sortedWith(compareBy({ it.walkMetres }, { it.end }))
+    3 -> lista.sortedWith(compareBy({ it.transfers }, { it.end }))
+    else -> lista.sortedBy { it.minutes + it.walkMetres / 120 + it.transfers * 6 + java.time.Duration.between(java.time.OffsetDateTime.now(), java.time.OffsetDateTime.parse(it.start)).toMinutes().coerceAtLeast(0) / 2 }
+}
+
 private fun nombrar(r: PlanResult, desde: String, hasta: String): PlanResult {
     fun n(s: String) = when (s) { "START" -> desde; "END" -> hasta; else -> s }
     fun f(i: Itinerary) = i.copy(legs = i.legs.map { l -> l.copy(from = l.from.copy(name = n(l.from.name)), to = l.to.copy(name = n(l.to.name))) })
-    return PlanResult(r.itineraries.map(::f), r.walk?.let(::f))
+    return PlanResult(r.itineraries.map(::f), r.walk?.let(::f), r.next)
 }
 
 @Composable
@@ -281,11 +326,19 @@ private fun Atajo(icono: ImageVector, texto: String, modifier: Modifier, onClick
     }
 }
 
+/** Minutos hasta una hora ISO, con un reloj que avanza solo cada 30 s. */
+@Composable
+fun minutosHasta(iso: String): Int {
+    var ahora by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(30_000); ahora = System.currentTimeMillis() } }
+    return runCatching { ((java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() - ahora) / 60_000).toInt() }.getOrDefault(0)
+}
+
 /** Una forma de llegar, como en Moovit: cuánto tarda, la cadena de buses, la hora y el pasaje. */
 @Composable
 fun TarjetaViaje(it: Itinerary, rapida: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val primero = it.legs.firstOrNull { l -> l.mode == "transit" }
-    Tarjeta(modifier.padding(horizontal = Margen, vertical = 5.dp), radio = 26.dp, color = if (rapida) LectorColors.CardHigh else LectorColors.Card, onClick = onClick) {
+    Tarjeta(modifier.padding(horizontal = Margen, vertical = 5.dp).then(if (co.saerling.rutas.fx.fxOn("tilt")) Modifier.inclinar(4f) else Modifier), radio = 26.dp, color = if (rapida) LectorColors.CardHigh else LectorColors.Card, onClick = onClick) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(duracion(it.minutes), style = LectorType.Hero, color = LectorColors.Text)
             Spacer(Modifier.weight(1f))
@@ -295,7 +348,7 @@ fun TarjetaViaje(it: Itinerary, rapida: Boolean, modifier: Modifier = Modifier, 
         Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
             it.legs.forEachIndexed { i, l ->
                 if (i > 0) Icon(Icons.Rounded.ChevronRight, null, tint = LectorColors.Muted, modifier = Modifier.size(16.dp))
-                if (l.mode == "transit") Insignia(l.code ?: "?", l.system)
+                if (l.mode == "transit") Insignia(codigoVisible(l.code, l.headsign), l.system)
                 else Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.AutoMirrored.Rounded.DirectionsWalk, null, tint = LectorColors.Muted, modifier = Modifier.size(18.dp))
                     Text("${l.minutes}", style = LectorType.Label, color = LectorColors.Muted)
@@ -306,7 +359,8 @@ fun TarjetaViaje(it: Itinerary, rapida: Boolean, modifier: Modifier = Modifier, 
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (primero != null) {
                 if (it.live) { PuntoVivo(7.dp); Spacer(Modifier.width(6.dp)) }
-                Text("Sale ${hora(primero.start)} · ${if (it.live) "en vivo" else "según horario"}", style = LectorType.Label, color = LectorColors.Text)
+                val faltan = minutosHasta(primero.start)
+                Text((if (faltan <= 0) "Sale ya" else if (faltan < 60) "Sale en $faltan min" else "Sale ${hora(primero.start)}") + " · ${if (it.live) "en vivo" else "según horario"}", style = LectorType.Label, color = LectorColors.Text)
             } else Text("Caminando", style = LectorType.Label, color = LectorColors.Text)
             Spacer(Modifier.weight(1f))
             val p = it.pasaje()
@@ -401,6 +455,7 @@ fun AjustesScreen(abrir: (Capa) -> Unit) {
     PaginaPestana("Ajustes") {
         item("p") { Seccion("Apariencia") }
         item("pers") { FilaAjuste(Icons.Rounded.Palette, "Personalización", "Tema, acento, cristal, esquinas, animaciones y más") { abrir(Capa.Personalizacion) } }
+        item("fx") { FilaAjuste(Icons.Rounded.AutoAwesome, "Biblioteca de animaciones y funciones", "${co.saerling.rutas.fx.Fx.count(IdsFxRutas)} de ${IdsFxRutas.size} activas · Magic UI, NumberFlow, coss ui, Motion Primitives") { abrir(Capa.BibliotecaFx) } }
         item("m") { Seccion("Mapa sin conexión") }
         item("offline") {
             Tarjeta(Modifier.padding(horizontal = Margen), radio = 24.dp) {
