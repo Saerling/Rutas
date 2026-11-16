@@ -101,6 +101,7 @@ export const zh: Messages = {
   plan: en.plan,
   updates: en.updates,
   settings: en.settings,
+  personalize: en.personalize,
 
   common: { retry: "重试", station: "车站", stop: "站点", accessible: "无障碍", done: "完成", close: "关闭", clear: "清除" },
 

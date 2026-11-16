@@ -205,6 +205,24 @@ export const es = {
     credits: "Basada en Paradero de Croma (licencia MIT). Datos de TransMilenio, rutas con Transitous, mapas © OpenStreetMap y CARTO.",
   },
 
+  personalize: {
+    title: "Personalización",
+    accent: "Color de acento",
+    accents: { nord: "Nord", verde: "Verde", morado: "Morado", naranja: "Naranja", rojo: "Rojo", mono: "Sin color" } as Record<string, string>,
+    black: "Negro puro",
+    blackBody: "El modo oscuro usa negro de verdad. Ahorra batería en pantallas OLED.",
+    corners: "Esquinas",
+    cornerStyles: { continuas: "Continuas (Mochy)", redondas: "Más redondas", cuadradas: "Cuadradas" } as Record<string, string>,
+    glass: "Cristal",
+    glassBody: "La barra de abajo deja ver lo de detrás, esmerilado como en Mochy.",
+    speed: "Velocidad de animación",
+    speedLabel: (s: number) => (s === 0 ? "Sin animación" : `${s}x`),
+    intro: "Animación de inicio",
+    introBody: "Los puntos de la ruta se encienden al abrir la app.",
+    on: "Sí",
+    off: "No",
+  },
+
   common: { retry: "Reintentar", station: "Estación", stop: "Paradero", accessible: "Accesible", done: "Listo", close: "Cerrar", clear: "Borrar" },
 
   map: { webOnly: "El mapa está disponible en la app para iOS y Android." },

@@ -2,7 +2,7 @@ import Constants from "expo-constants";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import type { ReactNode } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, Switch, View } from "react-native";
 
 import { Button } from "@/components/button";
 import { Chip } from "@/components/chip";
@@ -13,13 +13,16 @@ import { LANGUAGES, setLanguage, useLanguageChoice, useT, type Language, type La
 import { useHealth } from "@/lib/api";
 import { setAppearance, setContrast, useAppearance, useContrast, type Appearance, type Contrast } from "@/lib/appearance";
 import { useOfflineMap } from "@/lib/offline-map";
+import { ACCENTS, SPEEDS, setPersonalization, usePersonalization, type Accent, type Corners } from "@/lib/personalize";
 import { checkForUpdate, currentBuild } from "@/lib/updates";
-import { usePalette } from "@/theme/colors";
+import { useAccent, usePalette, useRadius } from "@/theme/colors";
 import { layout, radius, size, space } from "@/theme/tokens";
 
 const REPO = "https://github.com/Saerling/Rutas";
 const APPEARANCES: Appearance[] = ["system", "light", "dark"];
 const CONTRASTS: Contrast[] = ["system", "high"];
+const ACCENT_KEYS: Accent[] = [...(Object.keys(ACCENTS) as Accent[]), "mono"];
+const CORNERS: Corners[] = ["continuas", "redondas", "cuadradas"];
 const CHOICES: LanguageChoice[] = ["system", ...(Object.keys(LANGUAGES) as Language[])];
 
 export default function Settings() {
@@ -29,10 +32,37 @@ export default function Settings() {
   const contrast = useContrast();
   const language = useLanguageChoice();
   const offline = useOfflineMap();
+  const look = usePersonalization();
   const s = offline.state;
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <Section title={t.personalize.title}>
+        <Choices label={t.about.appearance.label}>
+          {APPEARANCES.map((a) => (
+            <Chip key={a} radio label={t.about.appearance[a]} accessibilityLabel={`${t.about.appearance[a]}, ${t.about.appearance.label}`} selected={appearance === a} onPress={() => setAppearance(a)} />
+          ))}
+        </Choices>
+        <Choices label={t.personalize.accent}>
+          {ACCENT_KEYS.map((a) => (
+            <Chip key={a} radio label={t.personalize.accents[a]} selected={look.accent === a} onPress={() => setPersonalization({ accent: a })} />
+          ))}
+        </Choices>
+        <Toggle label={t.personalize.black} body={t.personalize.blackBody} value={look.black} onChange={(black) => setPersonalization({ black })} />
+        <Choices label={t.personalize.corners}>
+          {CORNERS.map((c) => (
+            <Chip key={c} radio label={t.personalize.cornerStyles[c]} selected={look.corners === c} onPress={() => setPersonalization({ corners: c })} />
+          ))}
+        </Choices>
+        <Toggle label={t.personalize.glass} body={t.personalize.glassBody} value={look.glass} onChange={(glass) => setPersonalization({ glass })} />
+        <Choices label={t.personalize.speed}>
+          {SPEEDS.map((v) => (
+            <Chip key={v} radio label={t.personalize.speedLabel(v)} selected={look.speed === v} onPress={() => setPersonalization({ speed: v })} />
+          ))}
+        </Choices>
+        <Toggle label={t.personalize.intro} body={t.personalize.introBody} value={look.intro} onChange={(intro) => setPersonalization({ intro })} />
+      </Section>
+
       <Section title={t.settings.offline.title}>
         <Text variant="callout" tone="muted">
           {t.settings.offline.body}
@@ -54,11 +84,6 @@ export default function Settings() {
             const label = c === "system" ? t.about.language.system : LANGUAGES[c].name;
             return <Chip key={c} radio label={label} accessibilityLabel={`${label}, ${t.about.language.label}`} selected={language === c} onPress={() => setLanguage(c)} />;
           })}
-        </Choices>
-        <Choices label={t.about.appearance.label}>
-          {APPEARANCES.map((a) => (
-            <Chip key={a} radio label={t.about.appearance[a]} accessibilityLabel={`${t.about.appearance[a]}, ${t.about.appearance.label}`} selected={appearance === a} onPress={() => setAppearance(a)} />
-          ))}
         </Choices>
         <Choices label={t.about.contrast.label}>
           {CONTRASTS.map((c) => (
@@ -84,8 +109,9 @@ export default function Settings() {
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
+  const r = useRadius();
   return (
-    <Glass style={styles.card}>
+    <Glass style={[styles.card, { borderRadius: r.sheet }]}>
       <Text variant="eyebrow" tone="faint" accessibilityRole="header">
         {title}
       </Text>
@@ -94,12 +120,29 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+function Toggle({ label, body, value, onChange }: { label: string; body: string; value: boolean; onChange: (value: boolean) => void }) {
+  const { accent } = useAccent();
+  const p = usePalette();
+  return (
+    <View style={styles.toggle}>
+      <View style={styles.toggleText}>
+        <Text variant="headline">{label}</Text>
+        <Text variant="caption" tone="muted">
+          {body}
+        </Text>
+      </View>
+      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} trackColor={{ true: accent, false: p.fillStrong }} thumbColor={p.elevated} />
+    </View>
+  );
+}
+
 function Progress({ value, label }: { value: number; label: string }) {
   const p = usePalette();
+  const { accent } = useAccent();
   return (
     <View accessibilityRole="progressbar" accessibilityLabel={label} accessibilityValue={{ min: 0, max: 100, now: Math.round(value) }} style={styles.group}>
       <View style={[styles.track, { backgroundColor: p.fillStrong }]}>
-        <View style={[styles.fill, { backgroundColor: p.ink, width: `${Math.min(100, Math.max(2, value))}%` }]} />
+        <View style={[styles.fill, { backgroundColor: accent, width: `${Math.min(100, Math.max(2, value))}%` }]} />
       </View>
       <Text variant="caption" tone="muted" tabular>
         {label}
@@ -125,6 +168,8 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.gutter, paddingTop: space[3], paddingBottom: layout.tabBarClearance, gap: space[4] },
   card: { padding: space[5], gap: space[3], borderRadius: radius.xl, borderCurve: "continuous" },
   group: { gap: space[2] },
+  toggle: { flexDirection: "row", alignItems: "center", gap: space[3] },
+  toggleText: { flex: 1, gap: space[0.5] },
   choices: { flexDirection: "row", flexWrap: "wrap", gap: space[2] },
   track: { height: size.dot.md, borderRadius: radius.pill, overflow: "hidden" },
   fill: { height: "100%", borderRadius: radius.pill },

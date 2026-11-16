@@ -101,6 +101,7 @@ export const fr: Messages = {
   plan: en.plan,
   updates: en.updates,
   settings: en.settings,
+  personalize: en.personalize,
 
   common: { retry: "Réessayer", station: "Station", stop: "Arrêt", accessible: "Accessible", done: "Terminé", close: "Fermer", clear: "Effacer" },
 

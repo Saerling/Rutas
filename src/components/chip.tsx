@@ -1,7 +1,7 @@
 import { PressableScale } from "pressto";
 import { StyleSheet } from "react-native";
 
-import { usePalette } from "@/theme/colors";
+import { useAccent, usePalette, useRadius } from "@/theme/colors";
 import { radius, size, space } from "@/theme/tokens";
 
 import { Text } from "./text";
@@ -21,6 +21,8 @@ export function Chip({
   accessibilityLabel?: string;
 }) {
   const p = usePalette();
+  const r = useRadius();
+  const { accent, onAccent } = useAccent();
   return (
     <PressableScale
       accessibilityRole={radio ? "radio" : "button"}
@@ -28,8 +30,8 @@ export function Chip({
       accessibilityState={radio ? { checked: selected } : { selected }}
       onPress={onPress}
       hitSlop={HIT}
-      style={[styles.chip, selected ? { backgroundColor: p.ink } : { borderColor: p.high ? p.border : p.separator, borderWidth: p.high ? size.line.hair : StyleSheet.hairlineWidth }]}>
-      <Text variant="callout" weight={selected ? 600 : 500} tone={selected ? "inverse" : "default"}>
+      style={[styles.chip, { borderRadius: r.pill }, selected ? { backgroundColor: accent } : { borderColor: p.high ? p.border : p.separator, borderWidth: p.high ? size.line.hair : StyleSheet.hairlineWidth }]}>
+      <Text variant="callout" weight={selected ? 600 : 500} color={selected ? onAccent : undefined}>
         {label}
       </Text>
     </PressableScale>

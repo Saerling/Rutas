@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from "react";
+
+import { personalization, subscribePersonalization } from "./personalize";
 import { AccessibilityInfo, Platform, useWindowDimensions } from "react-native";
 
 /** The phone's accessibility settings, kept current while the app runs. */
@@ -40,14 +42,28 @@ if (Platform.OS !== "web") {
   AccessibilityInfo.addEventListener("screenReaderChanged", (screenReader: boolean) => set({ screenReader }));
 }
 
+let merged: Accessibility = state;
+let mergedFrom: [Accessibility, number] = [state, personalization().speed];
+
+/** The phone's settings, with "animations off" in Personalización counted as reduce motion. */
+function snapshot(): Accessibility {
+  const speed = personalization().speed;
+  if (mergedFrom[0] !== state || mergedFrom[1] !== speed) {
+    merged = { ...state, reduceMotion: state.reduceMotion || speed === 0 };
+    mergedFrom = [state, speed];
+  }
+  return merged;
+}
+
 export function useAccessibility(): Accessibility {
-  return useSyncExternalStore(
-    (l) => {
-      listeners.add(l);
-      return () => listeners.delete(l);
-    },
-    () => state,
-  );
+  return useSyncExternalStore((l) => {
+    listeners.add(l);
+    const off = subscribePersonalization(l);
+    return () => {
+      listeners.delete(l);
+      off();
+    };
+  }, snapshot);
 }
 
 /** iOS accessibility text sizes start around 1.35x. From there, rows stack instead of squeezing side by side. */

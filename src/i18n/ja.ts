@@ -101,6 +101,7 @@ export const ja: Messages = {
   plan: en.plan,
   updates: en.updates,
   settings: en.settings,
+  personalize: en.personalize,
 
   common: { retry: "再試行", station: "駅", stop: "停留所", accessible: "バリアフリー", done: "完了", close: "閉じる", clear: "消去" },
 

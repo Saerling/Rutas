@@ -59,5 +59,6 @@ export const icons = {
   work: { ios: "briefcase.fill", android: "work" },
   pin: { ios: "mappin.circle.fill", android: "place" },
   history: { ios: "clock.arrow.circlepath", android: "history" },
+  settings: { ios: "gearshape.fill", android: "settings" },
   flagEnd: { ios: "flag.checkered", android: "sports_score" },
 } satisfies Record<string, Name>;

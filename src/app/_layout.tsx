@@ -15,6 +15,7 @@ import "@/lib/accessibility";
 import "@/lib/appearance";
 import { useOnboarded } from "@/lib/onboarding";
 import { useUpdateCheck } from "@/lib/updates";
+import { Intro } from "@/components/intro";
 import { usePalette } from "@/theme/colors";
 import { fonts } from "@/theme/tokens";
 
@@ -71,6 +72,7 @@ export default function RootLayout() {
               <Stack.Screen name="onboarding" options={{ headerShown: false, animation: "fade" }} />
             </Stack.Protected>
           </Stack>
+          {onboarded && <Intro />}
           <Toaster position="top-center" duration={2200} toastOptions={{ titleStyle: { fontFamily: fonts[600] }, descriptionStyle: { fontFamily: fonts[400] } }} />
         </ThemeProvider>
       </QueryClientProvider>

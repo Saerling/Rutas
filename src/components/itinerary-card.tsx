@@ -5,7 +5,7 @@ import { StyleSheet, View } from "react-native";
 
 import { useT } from "@/i18n";
 import { clock, money } from "@/lib/format";
-import { signal, usePalette } from "@/theme/colors";
+import { signal, useAccent, usePalette, useRadius } from "@/theme/colors";
 import { radius, size, space } from "@/theme/tokens";
 import { estimateFare, type Itinerary } from "@/transit/plan";
 
@@ -17,6 +17,8 @@ import { Text } from "./text";
 /** One way to get there, read the way Moovit shows it: how long, the chain of buses, when you leave and arrive, and how much you walk. */
 export function ItineraryCard({ it, fastest }: { it: Itinerary; fastest?: boolean }) {
   const p = usePalette();
+  const r = useRadius();
+  const { accent } = useAccent();
   const t = useT();
   const duration = t.plan.duration(it.minutes);
   const transfers = it.legs.some((l) => l.mode === "transit") ? t.plan.transfers(it.transfers) : t.plan.walkOnly;
@@ -33,7 +35,7 @@ export function ItineraryCard({ it, fastest }: { it: Itinerary; fastest?: boolea
         void Haptics.selectionAsync();
         router.push({ pathname: "/trip/[id]", params: { id: it.id } });
       }}
-      style={[styles.card, { backgroundColor: p.surface, borderColor: fastest ? p.ink : p.separator }]}>
+      style={[styles.card, { borderRadius: r.xl, backgroundColor: p.surface, borderColor: fastest ? accent : p.separator, borderWidth: fastest ? size.line.rule : size.line.hair }]}>
       <View style={styles.top}>
         <Text variant="title" tabular>
           {duration}

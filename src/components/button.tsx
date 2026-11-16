@@ -1,7 +1,7 @@
 import { PressableScale } from "pressto";
 import { StyleSheet } from "react-native";
 
-import { usePalette } from "@/theme/colors";
+import { usePalette, useRadius } from "@/theme/colors";
 import { radius, size, space } from "@/theme/tokens";
 
 import { Text } from "./text";
@@ -21,6 +21,7 @@ interface ButtonProps {
 /** The one button. Primary is ink, secondary is outlined, quiet is text only. */
 export function Button({ label, onPress, variant = "primary", height = "lg", hug, disabled, role = "button", accessibilityLabel, accessibilityHint }: ButtonProps) {
   const p = usePalette();
+  const r = useRadius();
   const look = {
     primary: { backgroundColor: p.ink },
     secondary: { borderColor: p.separator, borderWidth: StyleSheet.hairlineWidth },
@@ -34,7 +35,7 @@ export function Button({ label, onPress, variant = "primary", height = "lg", hug
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled }}
       onPress={disabled ? undefined : onPress}
-      style={[styles.base, { minHeight: size.control[height], opacity: disabled ? 0.6 : 1 }, hug && styles.hug, look]}>
+      style={[styles.base, { borderRadius: r.pill, minHeight: size.control[height], opacity: disabled ? 0.6 : 1 }, hug && styles.hug, look]}>
       <Text variant="headline" weight={variant === "quiet" ? 500 : 600} tone={variant === "primary" ? "inverse" : variant === "quiet" ? "muted" : "default"}>
         {label}
       </Text>

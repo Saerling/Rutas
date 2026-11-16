@@ -202,6 +202,24 @@ export const en: Messages = {
     credits: "Based on Paradero by Croma (MIT license). Data from TransMilenio, trips with Transitous, maps © OpenStreetMap and CARTO.",
   },
 
+  personalize: {
+    title: "Personalization",
+    accent: "Accent colour",
+    accents: { nord: "Nord", verde: "Green", morado: "Purple", naranja: "Orange", rojo: "Red", mono: "No colour" },
+    black: "Pure black",
+    blackBody: "Dark mode uses true black. Saves battery on OLED screens.",
+    corners: "Corners",
+    cornerStyles: { continuas: "Continuous (Mochy)", redondas: "Rounder", cuadradas: "Square" },
+    glass: "Glass",
+    glassBody: "The bottom bar shows what is behind it, frosted like Mochy.",
+    speed: "Animation speed",
+    speedLabel: (s) => (s === 0 ? "No animation" : `${s}x`),
+    intro: "Startup animation",
+    introBody: "The route's dots light up when the app opens.",
+    on: "On",
+    off: "Off",
+  },
+
   common: { retry: "Try again", station: "Station", stop: "Stop", accessible: "Accessible", done: "Done", close: "Close", clear: "Clear" },
 
   map: { webOnly: "The map is available in the iOS and Android app." },

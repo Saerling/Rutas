@@ -1,7 +1,7 @@
 import Svg, { Circle } from "react-native-svg";
 
 /** Dots along an S from x, y with radius r and opacity o: the route between where you are and where you go. Same drawing as the app icon. */
-const DOTS: [number, number, number, number][] = [
+export const MARK_DOTS: [number, number, number, number][] = [
   [393, 761, 18, 0.66],
   [449, 728, 20, 0.76],
   [484, 673, 22, 0.85],
@@ -19,7 +19,7 @@ const DOTS: [number, number, number, number][] = [
 export function RutasMark({ size, color, accent }: { size: number; color: string; accent: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 1024 1024" accessible accessibilityRole="image" accessibilityLabel="Rutas">
-      {DOTS.map(([x, y, r, o], i) => (
+      {MARK_DOTS.map(([x, y, r, o], i) => (
         <Circle key={i} cx={x} cy={y} r={r} fill={color} opacity={o} />
       ))}
       <Circle cx={262} cy={762} r={56} fill="none" stroke={color} strokeWidth={26} />

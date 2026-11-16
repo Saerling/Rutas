@@ -1,41 +1,50 @@
-import { NativeTabs } from "expo-router/native-tabs";
+import { BlurTargetView } from "expo-blur";
+import { TabList, TabSlot, TabTrigger, Tabs } from "expo-router/ui";
+import { useRef, type ComponentRef } from "react";
+import { StyleSheet, View } from "react-native";
+
+import { icons } from "@/components/icon";
+import { TabBar, TabButton } from "@/components/tab-bar";
 import { useT } from "@/i18n";
 import { useCardShortcut } from "@/lib/tullave";
 import { usePalette } from "@/theme/colors";
-import { fonts } from "@/theme/tokens";
+
+/** Five tabs, with Ajustes in the corner like in Shiori. The routes are declared in a hidden list; the bar drawn on top is ours. */
+const TABS = [
+  { name: "(home)", href: "/", icon: icons.location, key: "nearby" },
+  { name: "(plan)", href: "/plan", icon: icons.directions, key: "plan" },
+  { name: "(search)", href: "/search", icon: icons.search, key: "search" },
+  { name: "(saved)", href: "/saved", icon: icons.starFill, key: "saved" },
+  { name: "(settings)", href: "/settings", icon: icons.settings, key: "settings" },
+] as const;
 
 export default function TabsLayout() {
   const p = usePalette();
   const t = useT();
+  const behind = useRef<ComponentRef<typeof View>>(null);
   useCardShortcut();
   return (
-    <NativeTabs
-      tintColor={p.ink}
-      minimizeBehavior="onScrollDown"
-      labelStyle={{ fontFamily: fonts[600] }}
-      backgroundColor={process.env.EXPO_OS === "android" ? p.background : undefined}
-      indicatorColor={p.fillStrong}
-      labelVisibilityMode="labeled">
-      <NativeTabs.Trigger name="(home)">
-        <NativeTabs.Trigger.Label>{t.tabs.nearby}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon src={require("@/assets/images/tabs/tab-nearby.png")} renderingMode="template" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(plan)">
-        <NativeTabs.Trigger.Label>{t.tabs.plan}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: "arrow.triangle.turn.up.right.diamond", selected: "arrow.triangle.turn.up.right.diamond.fill" }} md="directions" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(saved)">
-        <NativeTabs.Trigger.Label>{t.tabs.saved}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: "star", selected: "star.fill" }} md="star" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(settings)">
-        <NativeTabs.Trigger.Label>{t.tabs.settings}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} md="settings" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(search)" role="search">
-        <NativeTabs.Trigger.Label>{t.tabs.search}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="magnifyingglass" md="search" />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <Tabs style={{ flex: 1, backgroundColor: p.background }}>
+      <BlurTargetView ref={behind} style={styles.fill}>
+        <TabSlot />
+      </BlurTargetView>
+      <TabBar behind={behind}>
+        {TABS.map((tab) => (
+          <TabTrigger key={tab.name} name={tab.name} asChild>
+            <TabButton icon={tab.icon} label={t.tabs[tab.key]} />
+          </TabTrigger>
+        ))}
+      </TabBar>
+      <TabList style={styles.hidden}>
+        {TABS.map((tab) => (
+          <TabTrigger key={tab.name} name={tab.name} href={tab.href as any} />
+        ))}
+      </TabList>
+    </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  hidden: { display: "none" },
+});

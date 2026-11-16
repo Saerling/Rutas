@@ -1,19 +1,20 @@
 import type { ReactNode } from "react";
 import { ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 
-import { usePalette } from "@/theme/colors";
+import { usePalette, useRadius } from "@/theme/colors";
 import { layout, radius, size, space } from "@/theme/tokens";
 
 /** Map on top, a sheet of details sliding over it, lifted by a hairline and a soft shadow so it never melts into the map. Stops and routes share this frame. */
 export function DetailScreen({ map, children }: { map: ReactNode; children: ReactNode }) {
   const p = usePalette();
+  const r = useRadius();
   const { height } = useWindowDimensions();
   return (
     <View style={[styles.screen, { backgroundColor: p.background }]}>
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ height: Math.round(height * layout.sheetMap) }}>
         {map}
       </View>
-      <View style={[styles.sheet, { backgroundColor: p.background, borderColor: p.border, boxShadow: p.shadowUp }]}>
+      <View style={[styles.sheet, { borderTopLeftRadius: r.xl, borderTopRightRadius: r.xl, backgroundColor: p.background, borderColor: p.border, boxShadow: p.shadowUp }]}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {children}
         </ScrollView>
