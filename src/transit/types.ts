@@ -75,6 +75,11 @@ export interface Bus {
   nextStop: string | null;
   plate: string | null;
   reportedAt: string | null;
+  /** Hacia dónde va, en grados (0 = norte), según el tramo del recorrido en que está. */
+  bearing?: number | null;
+  /** Último paradero del recorrido en que va. */
+  toward?: string | null;
+  label?: string | null;
 }
 
 export interface IncomingBus extends Bus {
@@ -100,6 +105,8 @@ export interface RouteDetail {
   path: [number, number][];
   /** Every way the route runs, the busiest first: its line and its stops in order. Absent from servers before 0.0.5. */
   patterns?: { path: [number, number][]; stops: string[] }[];
+  /** Cada sentido o variante: hacia dónde va, sus paradas, su trazo y las salidas de hoy desde la primera parada. */
+  variants?: { toward: string; stops: { id: string; name: string; lat: number; lon: number }[]; path: [number, number][]; departures: string[] }[];
   stops: { id: string; name: string; lat: number; lon: number }[];
   buses: Bus[];
   alerts: Alert[];

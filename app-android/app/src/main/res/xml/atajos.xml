@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="tullave" android:enabled="true" android:icon="@drawable/ic_noti" android:shortcutShortLabel="@string/atajo_tullave">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="co.saerling.rutas" android:targetClass="co.saerling.rutas.MainActivity">
+            <extra android:name="atajo" android:value="tullave" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="casa" android:enabled="true" android:icon="@drawable/ic_noti" android:shortcutShortLabel="@string/atajo_casa">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="co.saerling.rutas" android:targetClass="co.saerling.rutas.MainActivity">
+            <extra android:name="atajo" android:value="casa" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="trabajo" android:enabled="true" android:icon="@drawable/ic_noti" android:shortcutShortLabel="@string/atajo_trabajo">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="co.saerling.rutas" android:targetClass="co.saerling.rutas.MainActivity">
+            <extra android:name="atajo" android:value="trabajo" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="novedades" android:enabled="true" android:icon="@drawable/ic_noti" android:shortcutShortLabel="@string/atajo_novedades">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="co.saerling.rutas" android:targetClass="co.saerling.rutas.MainActivity">
+            <extra android:name="atajo" android:value="novedades" />
+        </intent>
+    </shortcut>
+</shortcuts>

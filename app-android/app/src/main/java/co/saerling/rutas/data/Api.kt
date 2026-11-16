@@ -40,6 +40,7 @@ object Api {
     suspend fun buscar(texto: String): SearchResult = get("/api/search?q=${q(texto)}")
     suspend fun paradero(id: String): StopDetail = get("/api/stops/${q(id)}")
     suspend fun ruta(id: String): RouteDetail = get("/api/routes/${q(id)}")
+    suspend fun novedades(): Novedades = get("/api/alerts")
     suspend fun lugares(texto: String, lat: Double?, lon: Double?): List<Place> =
         get("/api/places?q=${q(texto)}" + if (lat != null && lon != null) "&lat=${r(lat)}&lon=${r(lon)}" else "")
 

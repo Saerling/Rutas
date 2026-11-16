@@ -48,12 +48,17 @@ class MainActivity : ComponentActivity() {
         co.saerling.rutas.data.GuiaServicio.crearCanales(applicationContext)
         almacen = Almacen.obtener(applicationContext)
         aplicarBarras(oscuro = almacen.modoTema != ModoTema.CLARO)
-        if (savedInstanceState == null) NuevaVersion.alArrancar(applicationContext)
+        if (savedInstanceState == null) { NuevaVersion.alArrancar(applicationContext); co.saerling.rutas.ui.rutas.Atajo.pedir(intent) }
         MovimientoApp.iniciar(applicationContext)
         MovimientoReducido.actualizar()
         @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
         val recompositor = window.decorView.createLifecycleAwareWindowRecomposer(MovimientoApp.escala, lifecycle)
         setContent(parent = recompositor) { App(almacen) { aplicarBarras(it) } }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        co.saerling.rutas.ui.rutas.Atajo.pedir(intent)
     }
 
     private fun aplicarBarras(oscuro: Boolean) {

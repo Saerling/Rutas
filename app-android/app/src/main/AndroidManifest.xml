@@ -28,6 +28,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/atajos" />
         </activity>
         <service android:name=".data.GuiaServicio" android:exported="false" android:foregroundServiceType="location" />
         <receiver android:name=".data.Recordatorio" android:exported="false" />

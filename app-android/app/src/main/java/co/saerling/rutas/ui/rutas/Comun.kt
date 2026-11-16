@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Accessible
 import androidx.compose.material.icons.rounded.DirectionsBus
 import androidx.compose.material.icons.rounded.Train
@@ -58,6 +59,7 @@ fun PaginaPestana(
     subtitulo: String? = null,
     estado: LazyListState = rememberLazyListState(),
     arriba: (@Composable () -> Unit)? = null,
+    atras: (() -> Unit)? = null,
     contenido: LazyListScope.() -> Unit,
 ) {
     val desplazado = estado.firstVisibleItemIndex > 0 || estado.firstVisibleItemScrollOffset > 40
@@ -69,6 +71,11 @@ fun PaginaPestana(
     ) {
         item("titulo") {
             Column(Modifier.statusBarsPadding().padding(horizontal = Margen).padding(top = 18.dp, bottom = 14.dp)) {
+                if (atras != null) {
+                    Box(Modifier.padding(bottom = 12.dp).size(44.dp).clip(SuaveShape(15.dp)).background(LectorColors.Card).pressable(atras), Alignment.Center) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Atrás", tint = LectorColors.Text)
+                    }
+                }
                 Text(
                     titulo, style = LectorType.Display, color = LectorColors.Text,
                     modifier = Modifier.graphicsLayer { scaleX = escala; scaleY = escala; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f) },

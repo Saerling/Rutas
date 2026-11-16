@@ -47,6 +47,7 @@ class CapturasTest {
                 ruta.startsWith("/api/stops") -> dato("stop")
                 ruta.startsWith("/api/routes") -> dato("route")
                 ruta.startsWith("/api/plan") -> dato("plan")
+                ruta.startsWith("/api/alerts") -> dato("alerts")
                 else -> "[]"
             }
         }
@@ -83,6 +84,13 @@ class CapturasTest {
         capturar("07-viaje") { RutasApp(almacen, capaInicial = Capa.Viaje(plan.itineraries.first())) }
     }
     @Test fun personalizacion() = capturar("08-personalizacion") { RutasApp(almacen, capaInicial = Capa.Personalizacion) }
+    @Test fun novedades() = capturar("13-novedades") { RutasApp(almacen, capaInicial = Capa.Novedades) }
+    @Test fun guardados() {
+        preparar()
+        val s = co.saerling.rutas.data.Stop("7107", "Universidad Nacional", "station", 4.637, -74.079)
+        if (!co.saerling.rutas.data.Guardados.esParadero(s.id)) co.saerling.rutas.data.Guardados.alternar(s)
+        capturar("14-guardados") { RutasApp(almacen, Pestana.Guardados) }
+    }
     @Test fun tarjeta() = capturar("12-tarjeta") { RutasApp(almacen, capaInicial = Capa.Tarjeta) }
     @Test fun bibliotecaFx() = capturar("11-biblioteca-fx") { RutasApp(almacen, capaInicial = Capa.BibliotecaFx) }
     @Test fun cercaClaro() = capturar("09-cerca-claro", oscuro = false) { RutasApp(almacen) }

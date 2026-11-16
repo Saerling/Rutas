@@ -30,6 +30,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class Bus(
     val id: String, val lat: Double, val lon: Double, val nextStop: String? = null, val plate: String? = null,
     val reportedAt: String? = null, val code: String? = null, val system: String? = null,
+    val bearing: Double? = null, val label: String? = null, val toward: String? = null,
 )
 
 @Serializable data class StopDetail(val feed: Feed, val stop: Stop, val arrivals: List<Arrival> = emptyList(), val incoming: List<Bus> = emptyList(), val alerts: List<Alert> = emptyList())
@@ -44,7 +45,13 @@ import kotlinx.serialization.Serializable
 @Serializable data class RouteDetail(
     val feed: Feed, val route: RouteInfo, val path: List<List<Double>> = emptyList(), val stops: List<RouteStop> = emptyList(),
     val buses: List<Bus> = emptyList(), val alerts: List<Alert> = emptyList(),
+    val variants: List<Variante> = emptyList(),
 )
+
+/** Un sentido de la ruta: hacia dónde va, sus paradas, su trazo y las salidas de hoy. */
+@Serializable data class Variante(val toward: String, val stops: List<RouteStop> = emptyList(), val path: List<List<Double>> = emptyList(), val departures: List<String> = emptyList())
+
+@Serializable data class Novedades(val alerts: List<Alert> = emptyList())
 
 @Serializable data class Nearby(val stops: List<Stop> = emptyList())
 @Serializable data class SearchResult(val stops: List<Stop> = emptyList(), val routes: List<RouteRef> = emptyList())

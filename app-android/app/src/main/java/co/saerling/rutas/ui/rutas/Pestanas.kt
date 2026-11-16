@@ -62,6 +62,8 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
         runCatching { Api.cerca(p.first, p.second).stops }.onSuccess { cerca = it }.onFailure { error = true }
     }
     LaunchedEffect(Unit) { while (true) { feed = runCatching { Api.salud().feed }.getOrNull(); delay(60_000) } }
+    var novedades by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { runCatching { Api.novedades().alerts.size }.onSuccess { novedades = it }; delay(5 * 60_000) } }
     val gpsApagado = Ubicacion.permiso && yo == null && !Ubicacion.gpsEncendido(ctx)
     val saludo = when (LocalTime.now().hour) { in 5..11 -> "Buenos días"; in 12..18 -> "Buenas tardes"; else -> "Buenas noches" }
 
@@ -98,6 +100,14 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
                 }
             }
             item("tullave") { AccesoTarjeta { abrir(Capa.Tarjeta) } }
+            if (novedades > 0) item("nov") {
+                Row(Modifier.padding(horizontal = Margen).padding(top = 10.dp).fillMaxWidth().clip(SuaveShape(22.dp)).background(LectorColors.Card).pressable { abrir(Capa.Novedades) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Warning, null, tint = androidx.compose.ui.graphics.Color(0xFFF2A33D), modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("$novedades novedad${if (novedades > 1) "es" else ""} en el servicio", style = LectorType.Section, color = LectorColors.Text, modifier = Modifier.weight(1f))
+                    Icon(Icons.Rounded.ChevronRight, null, tint = LectorColors.Muted)
+                }
+            }
             if (Guardados.paraderos.isNotEmpty()) {
                 item("guardados-t") { Seccion("Tus paraderos") }
                 item("guardados") {
@@ -502,30 +512,78 @@ fun nombreSistema(s: String?) = when (s) {
 @Composable
 fun GuardadosScreen(abrir: (Capa) -> Unit) {
     PaginaPestana("Guardados") {
-        if (Guardados.paraderos.isEmpty() && Guardados.rutas.isEmpty()) {
+        if (Guardados.paraderos.isEmpty() && Guardados.rutas.isEmpty() && Guardados.casa == null && Guardados.trabajo == null) {
             item("vacio") { Vacio("Aún no guardas nada", "Toca la estrella en un paradero o una ruta y aparecerá aquí, con sus próximos buses.") }
         }
-        if (Guardados.paraderos.isNotEmpty()) item("pt") { Seccion("Paraderos") }
-        items(Guardados.paraderos, key = { "p" + it.id }) { g ->
-            FilaParadero(Stop(g.id, g.nombre, if (g.estacion) "station" else "stop", g.lat, g.lon, routes = g.codigos.map { RouteRef(it, code = it) }), { abrir(Capa.Paradero(g.id)) }, Modifier.revelar("gp" + g.id))
-        }
-        if (Guardados.rutas.isNotEmpty()) item("rt") { Seccion("Rutas") }
-        items(Guardados.rutas, key = { "r" + it.id }) { g -> FilaRuta(RouteRef(g.id, code = g.codigo, name = g.nombre, system = g.sistema), Modifier.revelar("gr" + g.id)) { abrir(Capa.Ruta(g.id)) } }
         if (Guardados.casa != null || Guardados.trabajo != null) {
             item("lt") { Seccion("Lugares") }
-            Guardados.casa?.let { c -> item("casa") { FilaLugar(Icons.Rounded.Home, c.name, "Casa") { Planeador.hasta = c; abrir(Capa.IrA) } } }
-            Guardados.trabajo?.let { t -> item("trab") { FilaLugar(Icons.Rounded.Work, t.name, "Trabajo") { Planeador.hasta = t; abrir(Capa.IrA) } } }
+            Guardados.casa?.let { c -> item("casa") { FilaQuitable(Icons.Rounded.Home, "Casa", c.name, { Planeador.hasta = c; abrir(Capa.IrA) }) { Guardados.ponerCasa(null); Avisos.mostrar("Casa quitada", "Deshacer") { Guardados.ponerCasa(c) } } } }
+            Guardados.trabajo?.let { t -> item("trab") { FilaQuitable(Icons.Rounded.Work, "Trabajo", t.name, { Planeador.hasta = t; abrir(Capa.IrA) }) { Guardados.ponerTrabajo(null); Avisos.mostrar("Trabajo quitado", "Deshacer") { Guardados.ponerTrabajo(t) } } } }
+        }
+        if (Guardados.paraderos.isNotEmpty()) item("pt") { Seccion("Paraderos · próximos buses") }
+        items(Guardados.paraderos, key = { "p" + it.id }) { g ->
+            ParaderoConBuses(g, Modifier.revelar("gp" + g.id), { abrir(Capa.Paradero(g.id)) }) {
+                Guardados.quitarParadero(g.id); Avisos.mostrar("Quitado de guardados", "Deshacer") { Guardados.devolver(g) }
+            }
+        }
+        if (Guardados.rutas.isNotEmpty()) item("rt") { Seccion("Rutas") }
+        items(Guardados.rutas, key = { "r" + it.id }) { g ->
+            Row(Modifier.revelar("gr" + g.id), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { FilaRuta(RouteRef(g.id, code = g.codigo, name = g.nombre, system = g.sistema)) { abrir(Capa.Ruta(g.id)) } }
+                BotonQuitar { Guardados.quitarRuta(g.id); Avisos.mostrar("Ruta quitada", "Deshacer") { Guardados.devolver(g) } }
+            }
         }
     }
 }
 
-// ───────────────────────────────────────── Ajustes ─────────────────────────────────────────
+@Composable
+private fun BotonQuitar(alQuitar: () -> Unit) {
+    Box(Modifier.padding(end = 12.dp).size(40.dp).clip(SuaveShape(14.dp)).pressable { Tacto.tic(); alQuitar() }, Alignment.Center) {
+        Icon(Icons.Rounded.Close, "Quitar", tint = LectorColors.Muted, modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun FilaQuitable(icono: ImageVector, titulo: String, detalle: String, onClick: () -> Unit, alQuitar: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) { FilaLugar(icono, titulo, detalle, onClick = onClick) }
+        BotonQuitar(alQuitar)
+    }
+}
+
+/** Paradero guardado con sus próximos buses en vivo (se actualiza cada 30 s mientras se ve). */
+@Composable
+private fun ParaderoConBuses(g: ParaderoGuardado, modifier: Modifier, onClick: () -> Unit, alQuitar: () -> Unit) {
+    var detalle by remember { mutableStateOf<StopDetail?>(null) }
+    LaunchedEffect(g.id) { while (true) { runCatching { Api.paradero(g.id) }.onSuccess { detalle = it }; delay(30_000) } }
+    Tarjeta(modifier.padding(horizontal = Margen).padding(bottom = 10.dp), onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(if (g.estacion) Icons.Rounded.Train else Icons.Rounded.DirectionsBus, null, tint = LectorColors.Muted, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(g.nombre, style = LectorType.Section, color = LectorColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Box(Modifier.size(32.dp).clip(SuaveShape(12.dp)).pressable { Tacto.tic(); alQuitar() }, Alignment.Center) { Icon(Icons.Rounded.Close, "Quitar", tint = LectorColors.Muted, modifier = Modifier.size(18.dp)) }
+        }
+        Spacer(Modifier.height(8.dp))
+        val proximos = detalle?.arrivals.orEmpty().distinctBy { it.code }.take(4)
+        if (proximos.isEmpty()) Text(if (detalle == null) "Cargando…" else "Sin buses próximos", style = LectorType.Label, color = LectorColors.Muted)
+        proximos.forEach { a ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.widthIn(min = 64.dp)) { Insignia(a.code, a.system) }
+                Text(a.name, style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.weight(1f), maxLines = 1)
+                Minutos(a)
+            }
+        }
+    }
+}
 
 @Composable
 fun AjustesScreen(abrir: (Capa) -> Unit) {
     val ctx = LocalContext.current
     LaunchedEffect(Unit) { MapaOffline.revisar(ctx) }
     PaginaPestana("Ajustes") {
+        item("tr") { Seccion("Transporte") }
+        item("tull") { FilaAjuste(Icons.Rounded.Contactless, "Tarjeta TuLlave", "Leer saldo y movimientos con NFC") { abrir(Capa.Tarjeta) } }
+        item("nov") { FilaAjuste(Icons.Rounded.Campaign, "Novedades del sistema", "Desvíos, cierres y cambios de TransMilenio") { abrir(Capa.Novedades) } }
         item("p") { Seccion("Apariencia") }
         item("pers") { FilaAjuste(Icons.Rounded.Palette, "Personalización", "Tema, acento, cristal, esquinas, animaciones y más") { abrir(Capa.Personalizacion) } }
         item("fx") { FilaAjuste(Icons.Rounded.AutoAwesome, "Biblioteca de animaciones y funciones", "${co.saerling.rutas.fx.Fx.count(IdsFxRutas)} de ${IdsFxRutas.size} activas · Magic UI, NumberFlow, coss ui, Motion Primitives") { abrir(Capa.BibliotecaFx) } }

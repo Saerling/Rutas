@@ -44,6 +44,20 @@ fun RutasApp(almacen: Almacen, inicial: Pestana = Pestana.Cerca, capaInicial: Ca
     val pila = remember { mutableStateListOf<Capa>().apply { capaInicial?.let { add(it) } } }
     val abrir: (Capa) -> Unit = { c -> if (c == Capa.IrA) { pila.clear(); pestana = Pestana.Ir } else pila.add(c) }
     val volver: () -> Unit = { if (pila.isNotEmpty()) pila.removeAt(pila.lastIndex) }
+    // Atajos del ícono (mantener presionado): abren directo lo que se pidió.
+    LaunchedEffect(Atajo.pedido) {
+        val a = Atajo.pedido ?: return@LaunchedEffect
+        Atajo.pedido = null
+        when (a) {
+            "tullave" -> { pila.clear(); pila.add(Capa.Tarjeta) }
+            "novedades" -> { pila.clear(); pila.add(Capa.Novedades) }
+            "casa", "trabajo" -> {
+                val lugar = if (a == "casa") co.saerling.rutas.data.Guardados.casa else co.saerling.rutas.data.Guardados.trabajo
+                pila.clear(); pestana = Pestana.Ir
+                if (lugar != null) Planeador.hasta = lugar else Avisos.mostrar(if (a == "casa") "Primero guarda tu casa en Ir" else "Primero guarda tu trabajo en Ir")
+            }
+        }
+    }
     BackHandler(pila.isNotEmpty()) { volver() }
     BackHandler(pila.isEmpty() && pestana != Pestana.Cerca) { pestana = Pestana.Cerca }
 
@@ -109,6 +123,7 @@ fun RutasApp(almacen: Almacen, inicial: Pestana = Pestana.Cerca, capaInicial: Ca
                     Capa.Personalizacion -> PersonalizacionScreen(almacen, volver)
                     Capa.BibliotecaFx -> co.saerling.rutas.fx.BibliotecaFxPantalla(remember { catalogoRutas() }, volver)
                     Capa.Tarjeta -> TarjetaScreen(volver)
+                    Capa.Novedades -> NovedadesScreen(abrir, volver)
                     Capa.IrA -> Unit
                 }
             }
@@ -131,4 +146,11 @@ fun RutasApp(almacen: Almacen, inicial: Pestana = Pestana.Cerca, capaInicial: Ca
         }
         AvisosHost(Modifier.align(Alignment.TopCenter))
     }
+}
+
+
+/** Lo que pidió un atajo del ícono; RutasApp lo atiende y lo borra. */
+object Atajo {
+    var pedido by androidx.compose.runtime.mutableStateOf<String?>(null)
+    fun pedir(i: android.content.Intent?) { i?.getStringExtra("atajo")?.let { pedido = it } }
 }

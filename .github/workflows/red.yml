@@ -1,0 +1,27 @@
+name: Red (GTFS)
+
+# Arma el índice de la red con el GTFS oficial de TransMilenio y lo publica en la versión "red".
+# El servidor lo lee de ahí: paraderos, rutas y horarios sin depender de Croma.
+on:
+  schedule:
+    - cron: "40 10 * * *" # 5:40 a. m. en Bogotá, después de que TransMilenio sube el GTFS del día
+  workflow_dispatch:
+  push:
+    paths: ["scripts/red.py", ".github/workflows/red.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python3 scripts/red.py red.json.gz
+      - name: Publicar
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release view red >/dev/null 2>&1 || gh release create red --title "Red de TransMilenio (datos)" --notes "Índice de la red armado a diario con el GTFS oficial de TransMilenio. Lo usa el servidor de Rutas; no es una versión de la app." --latest=false --prerelease
+          gh release upload red red.json.gz --clobber

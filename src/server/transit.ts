@@ -1,219 +1,255 @@
 import { humanizeAlert } from "@/transit/alerts";
 import { dedupeRoutes, describeRoute } from "@/transit/codes";
-import type { Alert, Arrival, Bus, Feed, Health, IncomingBus, Nearby, RouteDetail, SearchResult, Stop, StopDetail } from "@/transit/types";
-import type { z } from "zod";
+import type { Alert, Arrival, Bus, Feed, Health, IncomingBus, Nearby, RouteDetail, RouteRef, SearchResult, Stop, StopDetail } from "@/transit/types";
 
-import { simplify } from "@/transit/path";
+import type { AlertaRt, Vehiculo } from "./gtfsrt";
+import { alertas, decodificar, faltan, metros, normalizar, pasadasHoy, posiciones, red, relojBogota, rumbo, ubicar, type Patron, type Red } from "./red";
 
-import { cached, croma, isLive } from "./croma";
-import * as s from "./schemas";
+/**
+ * Todo sale de los datos abiertos de TransMilenio: el GTFS (índice "red") y sus feeds de GTFS Realtime.
+ * Sin Croma, sin créditos. Las llegadas en vivo se calculan con la posición del bus y los tiempos del horario.
+ */
 
-const MINUTE = 60_000;
+const VIEJO_S = 300;
+const iso = (s: number) => new Date(s * 1000).toISOString().replace(/\.\d+Z$/, "Z");
 
-/** How long a live answer may stand in for one the source failed to give. Every answer carries its own time, so the app says how old it is. */
-const LIVE_GRACE_MS = 90_000;
-/** Croma picks up each new TransMilenio batch within seconds, so live answers are shared for only a few. */
-const LIVE_TTL_MS = 3_000;
-const nearbyCache = cached<Nearby>(5 * MINUTE);
-const searchCache = cached<SearchResult>(30 * MINUTE);
-const stopCache = cached<z.infer<typeof s.stopLookup>>(6 * 60 * MINUTE);
-const arrivalsCache = cached<z.infer<typeof s.arrivals>>(LIVE_TTL_MS, LIVE_GRACE_MS);
-const alertsCache = cached<Alert[]>(2 * MINUTE);
-const routeCache = cached<Omit<RouteDetail, "buses" | "feed" | "alerts">>(60 * MINUTE);
-const busesCache = cached<{ feed: Feed; buses: Bus[] }>(LIVE_TTL_MS, LIVE_GRACE_MS);
-const aroundCache = cached<z.infer<typeof s.vehicles>>(LIVE_TTL_MS, LIVE_GRACE_MS);
+function ref(rd: Red, i: number): RouteRef {
+  const r = rd.rutas[i];
+  return describeRoute({ id: r[0], shortName: r[1], longName: r[2], system: r[3] });
+}
 
-function toStop(raw: z.infer<typeof s.stop>): Stop {
+function rutasDe(rd: Red, parada: number): RouteRef[] {
+  const pats = rd.porParada.get(parada) ?? [];
+  return dedupeRoutes([...new Set(pats.map((p) => p.r))].map((i) => ref(rd, i))).sort((a, b) => a.code.localeCompare(b.code, "es", { numeric: true }));
+}
+
+function parada(rd: Red, i: number, desde?: { lat: number; lon: number }): Stop {
+  const p = rd.paradas[i];
   return {
-    id: raw.stop_id,
-    name: raw.name,
-    kind: raw.kind === "station" ? "station" : "stop",
-    lat: raw.latitude,
-    lon: raw.longitude,
-    accessible: raw.wheelchair_boarding === "accessible",
-    distanceM: raw.distance_m == null ? null : Math.round(raw.distance_m),
-    routes: dedupeRoutes(
-      raw.routes.map((r) => describeRoute({ id: r.route_id, shortName: r.short_name ?? null, longName: r.long_name ?? null, system: r.system ?? null })),
-    ),
+    id: p[0], name: p[1], kind: p[4] ? "station" : "stop", lat: p[2], lon: p[3], accessible: !!p[5],
+    distanceM: desde ? Math.round(metros(desde.lat, desde.lon, p[2], p[3])) : null,
+    routes: rutasDe(rd, i),
   };
 }
 
-function toAlerts(raw: z.infer<typeof s.alerts>): Alert[] {
-  return raw.alerts.map((a) => {
-    const routes = a.routes.flatMap((r) => (r.route_code ? [r.route_code] : []));
-    const { title, detail, places, note } = humanizeAlert({ effect: a.effect ?? null, description: a.description ?? null, routes });
-    return { id: a.alert_id, effect: a.effect ?? "unknown", title, detail, places, note, routes, until: a.active_periods[0]?.end ?? null };
+/** Paraderos que un pasajero reconoce: estaciones y paradas sueltas, no los vagones de cada estación. */
+function visible(rd: Red, i: number): boolean {
+  const p = rd.paradas[i];
+  return !p[6] && (rd.porParada.get(i)?.length ?? 0) > 0;
+}
+
+export async function nearby(lat: number, lon: number): Promise<Nearby> {
+  const rd = await red();
+  const cerca: [number, number][] = [];
+  rd.paradas.forEach((p, i) => {
+    const d = metros(lat, lon, p[2], p[3]);
+    if (d <= 700 && visible(rd, i)) cerca.push([d, i]);
   });
+  cerca.sort((a, b) => a[0] - b[0]);
+  return { stops: cerca.slice(0, 25).map(([, i]) => parada(rd, i, { lat, lon })) };
 }
 
-/** Nearest first, rounded to ~50 m so riders standing on the same corner share one answer. */
-export function nearby(lat: number, lon: number): Promise<Nearby> {
-  const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
-  return nearbyCache(key, async () => {
-    const data = await croma("stops-search", { latitude: lat, longitude: lon, radius_m: 700, per_page: 25 }, s.stopsSearch);
-    return { stops: data.stops.map(toStop) };
+export async function search(query: string): Promise<SearchResult> {
+  const rd = await red();
+  const q = normalizar(query);
+  if (!q) return { stops: [], routes: [] };
+  const palabras = q.split(" ");
+  const stops: [number, number][] = [];
+  rd.nombresNorm.forEach((n, i) => {
+    if (!visible(rd, i) || !palabras.every((w) => n.includes(w))) return;
+    stops.push([n.startsWith(q) ? 0 : n.includes(q) ? 1 : 2, i]);
   });
+  stops.sort((a, b) => a[0] - b[0] || rd.paradas[a[1]][1].length - rd.paradas[b[1]][1].length);
+  const qc = q.replace(/ /g, "");
+  const routes = dedupeRoutes(
+    rd.rutas.map((_, i) => ref(rd, i)).filter((r) => r.aliases.some((a) => normalizar(a).replace(/ /g, "").startsWith(qc)) || normalizar(r.name).includes(q)),
+  )
+    .sort((a, b) => Number(!a.aliases.some((x) => normalizar(x) === q)) - Number(!b.aliases.some((x) => normalizar(x) === q)) || a.code.length - b.code.length)
+    .slice(0, 15);
+  return { stops: stops.slice(0, 15).map(([, i]) => parada(rd, i)), routes };
 }
 
-export function search(query: string): Promise<SearchResult> {
-  const q = query.trim().toLowerCase();
-  return searchCache(q, async () => {
-    const [stops, routes] = await Promise.all([
-      croma("stops-search", { query: q, per_page: 15 }, s.stopsSearch),
-      croma("routes-search", { query: q, per_page: 15 }, s.routesSearch),
-    ]);
-    return {
-      stops: stops.stops.map(toStop),
-      routes: dedupeRoutes(
-        routes.routes.map((r) => describeRoute({ id: r.route_id, shortName: r.short_name ?? null, longName: r.long_name ?? null, system: r.system ?? null })),
-      ),
-    };
+function aAlerta(rd: Red, a: AlertaRt): Alert {
+  const routes = a.rutas.flatMap((id) => {
+    const i = rd.rutaIdx.get(id);
+    return i === undefined ? [] : [rd.rutas[i][1]];
   });
+  const h = humanizeAlert({ effect: a.efecto, description: a.detalle || a.titulo, routes });
+  return { id: a.id, effect: a.efecto, title: h.title, detail: h.detail, places: h.places, note: h.note, routes, until: a.hasta ? iso(a.hasta) : null };
 }
 
-let feedDown = false;
-
-function within<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
-  const late = new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms));
-  return Promise.race([work.catch(() => fallback), late]);
+async function alertasDe(rd: Red, filtro: { paradas?: Set<string>; ruta?: string }): Promise<Alert[]> {
+  const todas = await alertas().catch(() => [] as AlertaRt[]);
+  return todas
+    .filter((a) => (filtro.ruta ? a.rutas.includes(filtro.ruta) : a.paradas.some((p) => filtro.paradas?.has(p))))
+    .slice(0, 6)
+    .map((a) => aAlerta(rd, a));
 }
 
-function alertsFor(filter: { stop_id: string } | { route: string }): Promise<Alert[]> {
-  return within(alertsCache(JSON.stringify(filter), async () => toAlerts(await croma("alerts", filter, s.alerts))), 1200, []);
+function feedDe(ts: number): Feed {
+  return { asOf: iso(ts), live: Date.now() / 1000 - ts <= VIEJO_S };
+}
+
+/** Un vagón se muestra como su estación: el pasajero busca "Héroes", no "Héroes A - 4 ó 6". */
+function publica(rd: Red, k: number): number {
+  const padre = rd.paradas[k][6];
+  return padre ? (rd.paradaIdx.get(padre) ?? k) : k;
+}
+
+function paradaCorta(rd: Red, k: number) {
+  const p = rd.paradas[publica(rd, k)];
+  return { id: p[0], name: p[1], lat: p[2], lon: p[3] };
+}
+
+function nombreParada(rd: Red, id: string): string | null {
+  const i = rd.paradaIdx.get(id);
+  return i === undefined ? null : rd.paradas[publica(rd, i)][1];
+}
+
+function aBus(rd: Red, v: Vehiculo): Bus {
+  const u = ubicar(rd, v);
+  let bearing: number | null = null;
+  let nextStop = nombreParada(rd, v.paradaId);
+  if (u && u.k + 1 < u.patron.s.length) {
+    const a = rd.paradas[u.patron.s[u.k]], b = rd.paradas[u.patron.s[u.k + 1]];
+    bearing = Math.round(rumbo(a[2], a[3], b[2], b[3]));
+    nextStop = rd.paradas[publica(rd, u.patron.s[u.k + 1])][1];
+  }
+  const toward = u ? rd.paradas[publica(rd, u.patron.s[u.patron.s.length - 1])][1] : null;
+  return { id: v.id, lat: v.lat, lon: v.lon, nextStop, plate: v.placa || null, reportedAt: iso(v.ts), bearing, label: v.etiqueta || null, toward };
 }
 
 export async function stopDetail(stopId: string): Promise<StopDetail | null> {
-  const found = stopCache(stopId, () => croma("stop", { stop_id: stopId }, s.stopLookup));
-  const around = found.then((l) => (feedDown ? [] : l.found && l.stop ? within(incomingTo(toStop(l.stop), l.stop.routes.map((r) => r.route_id)), 1500, []) : []));
-  const [lookup, next, alerts, incoming] = await Promise.all([
-    found,
-    arrivalsCache(stopId, () => croma("stop-arrivals", { stop_id: stopId, limit: 30 }, s.arrivals)),
-    alertsFor({ stop_id: stopId }),
-    around,
-  ]);
-  if (!lookup.found || !lookup.stop) return null;
-  const stop = toStop(lookup.stop);
-  const live = isLive(next.as_of, next.live);
-  feedDown = !live;
+  const rd = await red();
+  const i = rd.paradaIdx.get(stopId);
+  if (i === undefined) return null;
+  const objetivo = new Set([i, ...(rd.hijos.get(i) ?? [])]);
+  const ids = new Set([...objetivo].map((k) => rd.paradas[k][0]));
+  const [pos, avisos] = await Promise.all([posiciones().catch(() => null), alertasDe(rd, { paradas: ids })]);
+  const ahora = Date.now() / 1000;
+  const feed = pos ? feedDe(pos.ts) : { asOf: iso(ahora), live: false };
+  const patrones = rd.porParada.get(i) ?? [];
+  const llegadas: (Arrival & { _s: number })[] = [];
+  const conVivo = new Set<number>();
 
-  const arrivals: Arrival[] = next.arrivals.map((a) => {
-    const route = describeRoute({ id: a.route_id ?? "", shortName: a.route_code ?? null, longName: a.route_name ?? null, system: a.system ?? null });
-    return {
-      routeId: a.route_id ?? null,
-      code: route.code,
-      aliases: route.aliases,
-      name: route.name,
-      system: route.system,
-      minutes: a.minutes_away ?? null,
-      at: a.predicted_at ?? null,
-      basis: a.basis,
-      delaySeconds: a.delay_seconds ?? null,
-      vehicle: a.vehicle_label ?? null,
-      plate: a.license_plate ?? null,
-    };
-  });
+  // En vivo: buses de las rutas que paran aquí, ubicados en su recorrido antes de esta parada.
+  if (pos && feed.live) {
+    for (const r of new Set(patrones.map((p) => p.r))) {
+      for (const v of pos.porRuta.get(rd.rutas[r][0]) ?? []) {
+        if (ahora - v.ts > VIEJO_S) continue;
+        const u = ubicar(rd, v);
+        if (!u) continue;
+        const j = u.patron.s.findIndex((s, x) => x > u.k && objetivo.has(s));
+        if (j < 0) continue;
+        const en = v.ts + faltan(u, j) - ahora;
+        if (en < -90 || en > 90 * 60) continue;
+        const rr = ref(rd, r);
+        conVivo.add(r);
+        llegadas.push({
+          routeId: rr.id, code: rr.code, aliases: rr.aliases, name: rr.name, system: rr.system,
+          minutes: Math.max(0, Math.round(en / 60)), at: iso(ahora + Math.max(0, en)), basis: "estimated", delaySeconds: null,
+          vehicle: v.etiqueta || null, plate: v.placa || null, _s: en,
+        });
+      }
+    }
+  }
 
-  return {
-    feed: { asOf: next.as_of, live },
-    stop,
-    arrivals,
-    incoming,
-    alerts,
-  };
+  // Del horario: rutas sin buses ubicados (o todas, si el feed está caído), próximas 90 minutos.
+  const { seg } = relojBogota();
+  for (const p of patrones) {
+    if (conVivo.has(p.r)) continue;
+    const j = p.s.findIndex((s, x) => x < p.s.length - 1 && objetivo.has(s));
+    if (j < 0) continue;
+    const rr = ref(rd, p.r);
+    for (const h of pasadasHoy(rd, p, j).filter((h) => h >= seg - 60 && h <= seg + 90 * 60).slice(0, 4)) {
+      const en = h - seg;
+      llegadas.push({
+        routeId: rr.id, code: rr.code, aliases: rr.aliases, name: rr.name, system: rr.system,
+        minutes: Math.max(0, Math.round(en / 60)), at: iso(ahora + en), basis: "scheduled", delaySeconds: null, vehicle: null, plate: null, _s: en,
+      });
+    }
+  }
+  llegadas.sort((a, b) => a._s - b._s);
+  const vistos = new Set<string>();
+  const arrivals = llegadas
+    .filter((a) => { const k = `${a.code}|${a.vehicle ?? a.at}`; if (vistos.has(k)) return false; vistos.add(k); return true; })
+    .slice(0, 30)
+    .map(({ _s, ...a }) => a);
+
+  const p = rd.paradas[i];
+  const sirven = new Set(patrones.map((x) => rd.rutas[x.r][0]));
+  const incoming: IncomingBus[] = pos && feed.live
+    ? pos.vehiculos
+        .filter((v) => sirven.has(v.rutaId) && ahora - v.ts <= VIEJO_S && metros(p[2], p[3], v.lat, v.lon) <= 3000)
+        .slice(0, 40)
+        .map((v) => { const rr = ref(rd, rd.rutaIdx.get(v.rutaId)!); return { ...aBus(rd, v), code: rr.code, system: rr.system }; })
+    : [];
+
+  return { feed, stop: parada(rd, i), arrivals, incoming, alerts: avisos };
 }
 
-/** Buses within ~3 km on a route that serves this stop: the "which one comes first" view riders asked for. */
-async function incomingTo(stop: Stop, routeIds: string[]): Promise<IncomingBus[]> {
-  const serving = new Set(routeIds);
-  const around = await aroundCache(`${stop.lat.toFixed(3)},${stop.lon.toFixed(3)}`, () =>
-    croma("vehicles", { latitude: stop.lat, longitude: stop.lon, radius_m: 3000, per_page: 300 }, s.vehicles),
-  );
-  return around.vehicles
-    .filter((v) => v.route_id && serving.has(v.route_id))
-    .slice(0, 40)
-    .map((v) => {
-      const route = describeRoute({ id: v.route_id ?? "", shortName: v.route_code ?? null, longName: v.route_name ?? null, system: v.system ?? null });
-      return {
-        id: v.vehicle_id ?? v.label ?? `${v.latitude},${v.longitude}`,
-        lat: v.latitude,
-        lon: v.longitude,
-        nextStop: v.stop_name ?? null,
-        plate: v.license_plate ?? null,
-        reportedAt: v.reported_at ?? null,
-        code: route.code,
-        system: route.system,
-      };
-    });
-}
-
-async function loadRoute(routeId: string) {
-  const data = await croma("route", { route_id: routeId, include_geometry: true }, s.route);
-  if (!data.found || !data.route) return null;
-  const r = data.route;
-  const main = [...r.patterns].sort((a, b) => b.trips_per_week - a.trips_per_week)[0];
-  const ref = describeRoute({ id: r.route_id, shortName: r.short_name ?? null, longName: r.long_name ?? null, system: r.system ?? null });
-
-  const hours = await within(croma("routes-search", { query: r.short_name ?? "", per_page: 10 }, s.routesSearch), 1500, null);
-  const own = hours?.routes.find((x) => x.route_id === r.route_id);
-
-  return {
-    route: {
-      ...ref,
-      firstDeparture: own?.first_departure?.slice(0, 5) ?? null,
-      lastDeparture: own?.last_departure?.slice(0, 5) ?? null,
-      tripsPerWeek: own?.trips_per_week ?? null,
-    },
-    path: (main?.geometry?.coordinates ?? []).map((c) => [c[0], c[1]] as [number, number]),
-    patterns: [...r.patterns]
-      .sort((a, b) => b.trips_per_week - a.trips_per_week)
-      .slice(0, 4)
-      .map((pt) => ({ path: simplify((pt.geometry?.coordinates ?? []).map((c) => [c[0], c[1]] as [number, number]), 6), stops: pt.stops.map((st) => st.stop_id) })),
-    stops: (main?.stops ?? []).flatMap((st) =>
-      st.latitude == null || st.longitude == null ? [] : [{ id: st.stop_id, name: st.name ?? "Paradero", lat: st.latitude, lon: st.longitude }],
-    ),
-  };
-}
-
-function busesOn(code: string) {
-  return busesCache(code, async () => {
-    const first = await croma("vehicles", { route: code, per_page: 200 }, s.vehicles);
-    const rest = await Promise.all(
-      Array.from({ length: Math.min(first.total_pages, 4) - 1 }, (_, i) => croma("vehicles", { route: code, per_page: 200, page: i + 2 }, s.vehicles)),
-    );
-    const buses = [first, ...rest].flatMap((page) =>
-      page.vehicles.map((v) => ({
-        id: v.vehicle_id ?? v.label ?? `${v.latitude},${v.longitude}`,
-        lat: v.latitude,
-        lon: v.longitude,
-        nextStop: v.stop_name ?? null,
-        plate: v.license_plate ?? null,
-        reportedAt: v.reported_at ?? null,
-      })),
-    );
-    return { feed: { asOf: first.as_of, live: isLive(first.as_of, first.live) }, buses };
-  });
+function horaTexto(s: number): string {
+  const h = Math.floor(s / 3600) % 24, m = Math.floor((s % 3600) / 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 export async function routeDetail(routeId: string): Promise<RouteDetail | null> {
-  const base = await routeCache(routeId, async () => {
-    const loaded = await loadRoute(routeId);
-    if (!loaded) throw new Error("not_found");
-    return loaded;
-  }).catch((e: Error) => {
-    if (e.message === "not_found") return null;
-    throw e;
-  });
-  if (!base) return null;
+  const rd = await red();
+  const r = rd.rutaIdx.get(routeId);
+  if (r === undefined) return null;
+  const pats = [...(rd.porRuta.get(r) ?? [])].sort((a, b) => cuenta(b) - cuenta(a));
+  const main = pats[0];
+  if (!main) return null;
+  const hoy = pasadasHoy(rd, main, 0);
+  const semana = pats.reduce((n, p) => n + Object.entries(p.d).reduce((m, [svc, v]) => m + v.length * (rd.servicios[svc]?.dias.reduce((a, b) => a + b, 0) ?? 0), 0), 0);
+  const [pos, avisos] = await Promise.all([posiciones().catch(() => null), alertasDe(rd, { ruta: routeId })]);
+  const ahora = Date.now() / 1000;
+  return {
+    feed: pos ? feedDe(pos.ts) : { asOf: iso(ahora), live: false },
+    route: { ...ref(rd, r), firstDeparture: hoy.length ? horaTexto(hoy[0]) : null, lastDeparture: hoy.length ? horaTexto(hoy[hoy.length - 1]) : null, tripsPerWeek: semana || null },
+    path: decodificar(main.p),
+    patterns: pats.slice(0, 4).map((p) => ({ path: decodificar(p.p), stops: p.s.map((k) => rd.paradas[k][0]) })),
+    variants: sentidos(rd, pats),
+    stops: main.s.map((k) => paradaCorta(rd, k)),
+    buses: (pos?.porRuta.get(routeId) ?? []).filter((v) => ahora - v.ts <= VIEJO_S).map((v) => aBus(rd, v)),
+    alerts: avisos,
+  };
+}
 
-  const code = base.route.feedCode;
-  const [{ feed, buses }, alerts] = await Promise.all([busesOn(code), alertsFor({ route: code })]);
-  return { ...base, feed, buses, alerts };
+/** Un recorrido por destino (el que más sale hoy), con sus salidas de hoy desde la primera parada. */
+function sentidos(rd: Red, pats: Patron[]) {
+  const conHoy = pats.map((p) => ({ p, hoy: pasadasHoy(rd, p, 0) })).sort((a, b) => b.hoy.length - a.hoy.length || cuenta(b.p) - cuenta(a.p));
+  const vistos = new Set<string>();
+  const out = [];
+  for (const { p, hoy } of conHoy) {
+    const toward = rd.paradas[publica(rd, p.s[p.s.length - 1])][1];
+    if (vistos.has(toward) || (!hoy.length && out.length)) continue;
+    vistos.add(toward);
+    out.push({ toward, stops: p.s.map((k) => paradaCorta(rd, k)), path: decodificar(p.p), departures: [...new Set(hoy.map(horaTexto))] });
+    if (out.length === 4) break;
+  }
+  return out;
+}
+
+function cuenta(p: Patron): number {
+  return Object.values(p.d).reduce((n, v) => n + v.length, 0);
+}
+
+/** Novedades activas de toda la red, sin repetir las que dicen lo mismo. */
+export async function allAlerts(): Promise<{ alerts: Alert[] }> {
+  const rd = await red();
+  const vistas = new Map<string, Alert>();
+  for (const a of await alertas()) {
+    const x = aAlerta(rd, a);
+    const k = `${x.title}|${x.detail}`;
+    const prev = vistas.get(k);
+    if (prev) prev.routes = [...new Set([...prev.routes, ...x.routes])];
+    else vistas.set(k, x);
+  }
+  return { alerts: [...vistas.values()].slice(0, 80) };
 }
 
 export async function health(): Promise<Health> {
-  const { feed } = await busesCache("__health", async () => {
-    const data = await croma("vehicles", { per_page: 1 }, s.vehicles);
-    return { feed: { asOf: data.as_of, live: isLive(data.as_of, data.live) }, buses: [] };
-  });
-  return { feed };
+  const pos = await posiciones();
+  return { feed: feedDe(pos.ts) };
 }

@@ -1,0 +1,1 @@
+{"alerts":[{"id":"1","effect":"detour","title":"Desvío","detail":"Por obras en la Av. Caracas con Calle 45, las rutas paran en la Carrera 14.","routes":["B12","G12","H72"],"until":null},{"id":"2","effect":"no_service","title":"Sin servicio","detail":"La estación Calle 57 está cerrada por mantenimiento.","routes":["4"],"until":null}]}

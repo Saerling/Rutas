@@ -29,7 +29,7 @@ Cada cambio en `main` compila un APK nuevo. La app avisa sola cuando hay versió
 ## Cómo está hecha
 
 - `app-android/`: la app de Android en Kotlin y Jetpack Compose. La capa de diseño (`ui/mochy`, cristal, movimiento, Personalización, hoja de actualización) viene de Mochy Music a través de Shiori. Las capturas de cada pantalla salen en el CI (artefacto «capturas»).
-- `src/`: el servidor (rutas `/api/*` de Expo Router, desplegado en Vercel) que habla con [Croma](https://usecroma.com) (buses en vivo) y [Transitous](https://transitous.org) (planeador). La llave de Croma vive solo en el servidor.
+- `src/`: el servidor (rutas `/api/*` de Expo Router, desplegado en Vercel) que lee directo los datos abiertos de TransMilenio: el GTFS oficial (índice diario armado por `scripts/red.py` y publicado en la versión `red`) y sus feeds de GTFS Realtime (`gtfs.transmilenio.gov.co`). Las llegadas en vivo se calculan con la posición de cada bus y los tiempos del horario. El planeador usa [Transitous](https://transitous.org). No necesita llaves ni créditos.
 
 ```bash
 cd app-android && gradle :app:assembleRelease        # APK

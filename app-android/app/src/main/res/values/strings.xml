@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="atajo_tullave">Saldo TuLlave</string>
+    <string name="atajo_casa">Ir a casa</string>
+    <string name="atajo_trabajo">Ir al trabajo</string>
+    <string name="atajo_novedades">Novedades</string>
+</resources>

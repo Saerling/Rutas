@@ -50,6 +50,8 @@ object Guardados {
         return !ya
     }
 
+    fun devolver(p: ParaderoGuardado) { if (!esParadero(p.id)) guardar(datos.copy(paraderos = datos.paraderos + p)) }
+    fun devolver(r: RutaGuardada) { if (!esRuta(r.id)) guardar(datos.copy(rutas = datos.rutas + r)) }
     fun quitarParadero(id: String) = guardar(datos.copy(paraderos = datos.paraderos.filterNot { it.id == id }))
     fun quitarRuta(id: String) = guardar(datos.copy(rutas = datos.rutas.filterNot { it.id == id }))
     fun ponerCasa(p: Place?) = guardar(datos.copy(casa = p))
