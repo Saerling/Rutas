@@ -1,0 +1,8 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Rutas",
+    "NSLocationWhenInUseUsageDescription": "Rutas uses your location only while it is open, to show you the stops and stations near you. We never store it.",
+    "NFCReaderUsageDescription": "Rutas reads your TuLlave card on your phone to show you its balance. The number never leaves your phone.",
+    "CardShortcutTitle": "Read my TuLlave"
+  }
+}

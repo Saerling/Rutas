@@ -1,0 +1,8 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Rutas",
+    "NSLocationWhenInUseUsageDescription": "Rutas usa tu ubicación solo mientras la tienes abierta, para mostrarte los paraderos y estaciones cerca de ti. No la guardamos.",
+    "NFCReaderUsageDescription": "Rutas lee tu tarjeta TuLlave en el teléfono para mostrarte el saldo. El número no sale del teléfono.",
+    "CardShortcutTitle": "Leer mi TuLlave"
+  }
+}
