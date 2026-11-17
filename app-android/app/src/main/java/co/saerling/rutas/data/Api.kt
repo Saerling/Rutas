@@ -23,7 +23,9 @@ object Visible {
 }
 
 /** Marca una consulta hecha a propósito en segundo plano (servicio de avisos). */
-object EnFondo : kotlin.coroutines.AbstractCoroutineContextElement(EnFondo), kotlin.coroutines.CoroutineContext.Key<EnFondo>
+object EnFondo : kotlin.coroutines.AbstractCoroutineContextElement(ClaveFondo)
+/** Clave aparte: un objeto no puede ser su propia clave (se pasaría a sí mismo sin terminar de crearse). */
+object ClaveFondo : kotlin.coroutines.CoroutineContext.Key<EnFondo>
 
 /** Cliente del servidor de Rutas. Las coordenadas salen del teléfono redondeadas a una cuadra (3 decimales). */
 object Api {
@@ -37,7 +39,7 @@ object Api {
     var simulado: ((String) -> String?)? = null
 
     private suspend inline fun <reified T> get(ruta: String): T {
-        if (kotlin.coroutines.coroutineContext[EnFondo] == null && simulado == null) Visible.en.first { it }
+        if (kotlin.coroutines.coroutineContext[ClaveFondo] == null && simulado == null) Visible.en.first { it }
         return pedir(ruta)
     }
 
