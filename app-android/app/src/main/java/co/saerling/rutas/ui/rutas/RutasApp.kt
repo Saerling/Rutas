@@ -15,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -130,6 +131,13 @@ fun RutasApp(almacen: Almacen, inicial: Pestana = Pestana.Cerca, capaInicial: Ca
             }
         }
 
+        // Viaje en curso: siempre a un toque, encima de la barra (como la navegación de Google Maps o Moovit).
+        val enViaje = co.saerling.rutas.data.GuiaViaje.viaje
+        AnimatedVisibility(
+            visible = enViaje != null && !abierta,
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 86.dp),
+            enter = slideInVertically { it / 2 } + fadeIn(), exit = slideOutVertically { it / 2 } + fadeOut(),
+        ) { enViaje?.let { v -> BarraViajeEnCurso(v) { pila.add(Capa.Viaje(v)) } } }
         AnimatedVisibility(
             visible = !abierta,
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -154,4 +162,24 @@ fun RutasApp(almacen: Almacen, inicial: Pestana = Pestana.Cerca, capaInicial: Ca
 object Atajo {
     var pedido by androidx.compose.runtime.mutableStateOf<String?>(null)
     fun pedir(i: android.content.Intent?) { i?.getStringExtra("atajo")?.let { pedido = it } }
+}
+
+/** La barra del viaje que estás haciendo: qué toca ahora y un toque para volver a la guía. */
+@Composable
+private fun BarraViajeEnCurso(v: co.saerling.rutas.data.Itinerary, abrir: () -> Unit) {
+    val (titulo, detalle) = co.saerling.rutas.data.GuiaViaje.texto(v, co.saerling.rutas.data.GuiaViaje.guia)
+    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    Row(
+        Modifier.padding(horizontal = 24.dp).widthIn(max = 520.dp).fillMaxWidth().clip(SuaveShape(22.dp)).background(acento)
+            .pressable { Tacto.tic(); abrir() }.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PuntoVivo()
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            androidx.compose.material3.Text(titulo, style = LectorType.Section.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            androidx.compose.material3.Text(detalle, style = LectorType.Label, color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        androidx.compose.material3.Icon(Icons.Rounded.ChevronRight, "Ver mi viaje", tint = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary)
+    }
 }

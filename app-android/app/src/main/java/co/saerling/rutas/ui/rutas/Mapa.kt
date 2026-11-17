@@ -99,6 +99,10 @@ fun Mapa(
     zonas: List<co.saerling.rutas.data.CeldaTrafico> = emptyList(),
     /** El bus resaltado (el que tocaste): se dibuja más grande. */
     resaltado: String? = null,
+    /** Mosaicos de flujo de tráfico de TomTom (calles verdes, naranja y rojas), si el servidor los tiene. */
+    flujo: Boolean = false,
+    /** Incidentes viales (TomTom): trancones, accidentes, cierres y obras, con su trazo. */
+    incidentes: List<co.saerling.rutas.data.Incidente> = emptyList(),
 ) {
     if (ModoPrueba.activo) { MapaFalso(modifier, puntos, tramos, buses); return }
     val ctx = LocalContext.current
@@ -112,6 +116,7 @@ fun Mapa(
     val alMoverActual = rememberUpdatedState(alMover)
     val alTocarActual = rememberUpdatedState(alTocarPunto)
     val alTocarBusActual = rememberUpdatedState(alTocarBus)
+    val flujoActual = rememberUpdatedState(flujo)
     val bajoPx = with(LocalDensity.current) { abajo.toPx().toInt() }
     val vista = remember {
         // TextureView: respeta las esquinas redondeadas y las animaciones de Mochy (un SurfaceView las ignora).
@@ -165,6 +170,15 @@ fun Mapa(
             s.addSource(GeoJsonSource("yo"))
             s.addSource(GeoJsonSource("trafico"))
             s.addSource(GeoJsonSource("zonas"))
+            s.addSource(GeoJsonSource("incidentes"))
+            // Flujo de TomTom debajo de todo lo nuestro (encima de las calles del mapa base).
+            s.addSource(org.maplibre.android.style.sources.RasterSource("flujo",
+                org.maplibre.android.style.sources.TileSet("2.2.0", co.saerling.rutas.data.Api.mosaicosTrafico(TemaActual.oscuro)).apply { minZoom = 8f; maxZoom = 18f }, 256))
+            s.addLayer(org.maplibre.android.style.layers.RasterLayer("flujo", "flujo").withProperties(rasterOpacity(0.85f), visibility(if (flujoActual.value) "visible" else "none")))
+            s.addLayer(LineLayer("incidentes-linea", "incidentes").withProperties(
+                lineColor(Expression.get("color")), lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(11, 2.5f), Expression.stop(16, 7f))),
+                lineOpacity(0.9f), lineCap("round"), lineJoin("round"),
+            ))
             s.addLayer(CircleLayer("zonas", "zonas").withProperties(
                 circleColor(Expression.get("color")), circleOpacity(0.38f), circleBlur(0.85f),
                 circleRadius(Expression.interpolate(Expression.exponential(2f), Expression.zoom(), Expression.stop(10, 14f), Expression.stop(13, 60f), Expression.stop(16, 420f))),
@@ -202,6 +216,9 @@ fun Mapa(
             s.addLayer(SymbolLayer("buses-codigo", "buses").withProperties(
                 iconImage(Expression.get("etiqueta")), iconAnchor("top"), iconOffset(arrayOf(0f, 22f)), iconAllowOverlap(true), iconIgnorePlacement(true),
             ).apply { minZoom = 14f })
+            s.addLayer(CircleLayer("incidentes-punto", "incidentes").withProperties(
+                circleRadius(6.5f), circleColor(Expression.get("color")), circleStrokeColor(0xFFFFFFFF.toInt()), circleStrokeWidth(2f),
+            ).withFilter(Expression.eq(Expression.get("punto"), true)))
             s.addLayer(CircleLayer("yo-halo", "yo").withProperties(circleRadius(14f), circleColor(0xFF4C8DFF.toInt()), circleOpacity(0.2f)))
             s.addLayer(CircleLayer("yo", "yo").withProperties(circleRadius(6.5f), circleColor(0xFF4C8DFF.toInt()), circleStrokeColor(Color.White.toArgb()), circleStrokeWidth(2.5f)))
             estilo = s
@@ -230,11 +247,14 @@ fun Mapa(
             }
         }))
     }
-    // Cada bus se desliza de donde estaba a donde está (1,2 s), como los carros de Uber, en vez de saltar.
+    // Cada bus avanza por la calle de donde estaba a donde está (1,2 s), como los carros de Uber, en vez de saltar.
+    // Si el servidor manda el tramo recorrido, el bus lo sigue (dobla las esquinas); si no, va en línea recta.
     val enPantalla = remember { HashMap<String, Pair<Double, Double>>() }
+    val rumbos = remember { HashMap<String, Double>() }
     LaunchedEffect(estilo, buses, resaltado) {
         val s = estilo ?: return@LaunchedEffect
         val fuente = s.getSourceAs<GeoJsonSource>("buses") ?: return@LaunchedEffect
+        class Mov(val b: Bus, val camino: List<Pair<Double, Double>>, val icono: String, val etiqueta: String, val rumbo: Double)
         val datos = buses.map { b ->
             val color = colorSistema(b.system).toArgb()
             val hex = String.format("%06X", 0xFFFFFF and color)
@@ -243,44 +263,88 @@ fun Mapa(
             val codigo = b.code.orEmpty()
             if (s.getImage(icono) == null) s.addImage(icono, IconosMapa.busArriba(ctx, color, art))
             if (s.getImage("et-$codigo-$hex") == null) s.addImage("et-$codigo-$hex", IconosMapa.etiqueta(ctx, codigo, color))
-            val antes = enPantalla[b.id]?.takeIf { p -> co.saerling.rutas.ui.rutas.metrosEntre(p, b.lat to b.lon) < 900 }
-            Triple(b, antes ?: (b.lat to b.lon), icono to "et-$codigo-$hex")
+            val destino = b.lat to b.lon
+            val antes = enPantalla[b.id]?.takeIf { p -> metrosEntre(p, destino) in 2.0..900.0 }
+            val tramo = b.trail?.filter { it.size >= 2 }?.map { it[1] to it[0] }.orEmpty()
+            val camino = when {
+                antes == null -> listOf(destino)
+                // El tramo arranca cerca de donde lo vimos: se sigue la calle.
+                tramo.size >= 2 && metrosEntre(tramo.first(), antes) < 120 -> listOf(antes) + tramo.drop(1).dropLast(1) + destino
+                else -> listOf(antes, destino)
+            }
+            // Sin rumbo nuevo, el bus conserva el último (no se voltea al norte).
+            val rumbo = b.bearing ?: rumbos[b.id] ?: 0.0
+            rumbos[b.id] = rumbo
+            Mov(b, camino, icono, "et-$codigo-$hex", rumbo)
+        }
+        fun enCamino(c: List<Pair<Double, Double>>, t: Float): Pair<Pair<Double, Double>, Double?> {
+            if (c.size == 1) return c[0] to null
+            val largos = c.zipWithNext { a, b -> metrosEntre(a, b) }
+            var falta = largos.sum() * t
+            for (k in largos.indices) {
+                val l = largos[k]
+                if (falta <= l || k == largos.lastIndex) {
+                    val f = if (l > 0) (falta / l).coerceIn(0.0, 1.0) else 1.0
+                    val a = c[k]; val b = c[k + 1]
+                    val rumbo = if (l > 3) Math.toDegrees(Math.atan2((b.second - a.second) * Math.cos(Math.toRadians(a.first)), b.first - a.first)).let { (it + 360) % 360 } else null
+                    return (a.first + (b.first - a.first) * f to a.second + (b.second - a.second) * f) to rumbo
+                }
+                falta -= l
+            }
+            return c.last() to null
         }
         fun pintar(t: Float) {
-            fuente.setGeoJson(FeatureCollection.fromFeatures(datos.map { (b, a, im) ->
-                val lat = a.first + (b.lat - a.first) * t; val lon = a.second + (b.lon - a.second) * t
-                enPantalla[b.id] = lat to lon
-                Feature.fromGeometry(Point.fromLngLat(lon, lat)).apply {
-                    addStringProperty("id", b.id); addStringProperty("icono", im.first); addStringProperty("etiqueta", im.second)
-                    addNumberProperty("rumbo", b.bearing ?: 0.0)
-                    addNumberProperty("escala", if (b.id == resaltado) 1.35 else 1.0)
-                    addNumberProperty("orden", if (b.id == resaltado) 2 else 1)
+            fuente.setGeoJson(FeatureCollection.fromFeatures(datos.map { m ->
+                val (p, rumboTramo) = enCamino(m.camino, t)
+                enPantalla[m.b.id] = p
+                // Mientras dobla una esquina, apunta hacia donde va en ese momento; al llegar, al rumbo de la calle.
+                val rumbo = if (t < 1f && m.camino.size > 2 && rumboTramo != null) rumboTramo else m.rumbo
+                Feature.fromGeometry(Point.fromLngLat(p.second, p.first)).apply {
+                    addStringProperty("id", m.b.id); addStringProperty("icono", m.icono); addStringProperty("etiqueta", m.etiqueta)
+                    addNumberProperty("rumbo", rumbo)
+                    addNumberProperty("escala", if (m.b.id == resaltado) 1.35 else 1.0)
+                    addNumberProperty("orden", if (m.b.id == resaltado) 2 else 1)
                 }
             }))
         }
-        val mueve = !co.saerling.rutas.ui.Mov.reducido && datos.any { (b, a, _) -> a.first != b.lat || a.second != b.lon }
+        val mueve = !co.saerling.rutas.ui.Mov.reducido && datos.any { it.camino.size > 1 }
         if (mueve) {
             val t0 = androidx.compose.runtime.withFrameNanos { it }
             while (true) {
-                val f = ((androidx.compose.runtime.withFrameNanos { it } - t0) / 1.2e9).toFloat().coerceIn(0f, 1f)
-                pintar(1f - (1f - f) * (1f - f) * (1f - f))
+                val f = ((androidx.compose.runtime.withFrameNanos { it } - t0) / 1.4e9).toFloat().coerceIn(0f, 1f)
+                pintar(1f - (1f - f) * (1f - f))
                 if (f >= 1f) break
                 kotlinx.coroutines.delay(32)
             }
         } else pintar(1f)
         val vivos = buses.map { it.id }.toSet()
-        enPantalla.keys.retainAll(vivos)
+        enPantalla.keys.retainAll(vivos); rumbos.keys.retainAll(vivos)
     }
     LaunchedEffect(estilo, buses, trafico) {
         val s = estilo ?: return@LaunchedEffect
         val mixto = setOf("zonal_urbano", "zonal_complementario", "zonal_especial", "alimentador")
         s.getSourceAs<GeoJsonSource>("trafico")?.setGeoJson(FeatureCollection.fromFeatures(if (!trafico) emptyList() else buses.mapNotNull { b ->
-            val f = b.from ?: return@mapNotNull null
+            // Solo el tramo que siguió por la calle: una recta entre dos reportes cruza manzanas.
+            val tramo = b.trail?.filter { it.size >= 2 } ?: return@mapNotNull null
             val k = b.kmh ?: return@mapNotNull null
-            if (b.system !in mixto || f.size < 2) return@mapNotNull null
-            Feature.fromGeometry(LineString.fromLngLats(listOf(Point.fromLngLat(f[0], f[1]), Point.fromLngLat(b.lon, b.lat)))).apply {
+            if (b.system !in mixto || tramo.size < 2) return@mapNotNull null
+            Feature.fromGeometry(LineString.fromLngLats(tramo.map { Point.fromLngLat(it[0], it[1]) })).apply {
                 addStringProperty("color", hexTrafico(nivelTrafico(k.toInt())))
             }
+        }))
+    }
+    LaunchedEffect(estilo, flujo) {
+        estilo?.getLayer("flujo")?.setProperties(visibility(if (flujo) "visible" else "none"))
+    }
+    LaunchedEffect(estilo, incidentes) {
+        val s = estilo ?: return@LaunchedEffect
+        s.getSourceAs<GeoJsonSource>("incidentes")?.setGeoJson(FeatureCollection.fromFeatures(incidentes.flatMap { i ->
+            val color = String.format("#%06X", 0xFFFFFF and colorIncidente(i.kind, i.magnitude).toArgb())
+            val linea = i.line.filter { it.size >= 2 }
+            listOfNotNull(
+                if (linea.size >= 2) Feature.fromGeometry(LineString.fromLngLats(linea.map { Point.fromLngLat(it[0], it[1]) })).apply { addStringProperty("color", color); addBooleanProperty("punto", false) } else null,
+                Feature.fromGeometry(Point.fromLngLat(i.lon, i.lat)).apply { addStringProperty("color", color); addBooleanProperty("punto", true) },
+            )
         }))
     }
     LaunchedEffect(estilo, zonas) {
@@ -358,4 +422,10 @@ fun metrosEntre(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
     val dy = (a.first - b.first) * 111_320.0
     val dx = (a.second - b.second) * 111_320.0 * Math.cos(Math.toRadians(a.first))
     return Math.hypot(dx, dy)
+}
+
+/** Color de un incidente vial: cierres y accidentes en rojo oscuro, trancones según qué tan graves. */
+fun colorIncidente(tipo: String, magnitud: Int): Color = when (tipo) {
+    "cierre" -> Color(0xFF9B1C1C); "accidente" -> Color(0xFFD7262C); "obra" -> Color(0xFFF08A24)
+    else -> when (magnitud) { 3, 4 -> Color(0xFFB4232A); 2 -> Color(0xFFE5484D); else -> Color(0xFFF2A33D) }
 }

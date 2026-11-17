@@ -43,6 +43,10 @@ object Api {
     suspend fun novedades(): Novedades = get("/api/alerts")
     suspend fun vehiculos(lat: Double, lon: Double, radio: Int = 1500): Vehiculos = get("/api/vehicles?lat=${r(lat)}&lon=${r(lon)}&radius=$radio")
     suspend fun trafico(): Trafico = get("/api/traffic")
+    suspend fun noticias(): Noticias = get("/api/news")
+    suspend fun incidentes(): Incidentes = get("/api/incidents")
+    /** Plantilla de los mosaicos de flujo de TomTom (pasan por el servidor para no poner la clave en la app). */
+    fun mosaicosTrafico(oscuro: Boolean) = BuildConfig.API + "/api/tiles?z={z}&x={x}&y={y}" + if (oscuro) "&dark=1" else ""
     suspend fun lugares(texto: String, lat: Double?, lon: Double?): List<Place> =
         get("/api/places?q=${q(texto)}" + if (lat != null && lon != null) "&lat=${r(lat)}&lon=${r(lon)}" else "")
 

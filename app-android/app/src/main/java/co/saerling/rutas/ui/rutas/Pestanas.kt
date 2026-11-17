@@ -74,8 +74,21 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
         runCatching { Api.cerca(p.first, p.second).stops }.onSuccess { cerca = it }.onFailure { error = true }
     }
     LaunchedEffect(Unit) { while (true) { feed = runCatching { Api.salud().feed }.getOrNull(); delay(60_000) } }
-    var novedades by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { runCatching { Api.novedades().alerts.size }.onSuccess { novedades = it }; delay(5 * 60_000) } }
+    var alertasVivo by remember { mutableStateOf<List<Alert>>(emptyList()) }
+    var boletines by remember { mutableStateOf<List<Boletin>>(emptyList()) }
+    LaunchedEffect(Unit) { while (true) { runCatching { Api.novedades().alerts }.onSuccess { alertasVivo = it }; delay(5 * 60_000) } }
+    LaunchedEffect(Unit) { while (true) { runCatching { Api.noticias().bulletins }.onSuccess { boletines = it }; delay(15 * 60_000) } }
+    val novedades = alertasVivo.size
+    // Lo que toca tus rutas o estaciones: en vivo, y boletines de los últimos 4 días.
+    val hace4 = java.time.LocalDate.now().minusDays(4).toString()
+    val tuyas = alertasVivo.mapNotNull { a -> MisRutas.afectadas(a.routes).takeIf { it.isNotEmpty() }?.let { Triple("a" + a.id, a.title.ifBlank { "Novedad del servicio" }, it) } } +
+        boletines.filter { (it.date ?: "") >= hace4 }.mapNotNull { b ->
+            val r = MisRutas.afectadas(b.routes) + MisRutas.estacionesAfectadas(b.stations)
+            if (r.isEmpty()) null else Triple("b" + b.id, b.title, r)
+        }
+    LaunchedEffect(tuyas.map { it.first }) {
+        tuyas.forEach { (id, titulo, rutas) -> MisRutas.avisar(ctx, id, "Afecta ${rutas.take(3).joinToString(", ")}", titulo) }
+    }
     // Todos los buses en vía alrededor (del centro del mapa si lo mueves), cada 15 s, con su velocidad.
     val centroBuses = centroMapa?.takeIf { Ubicacion.enBogota(it.first, it.second) } ?: base
     val claveBuses = centroBuses?.let { "%.2f,%.2f".format(java.util.Locale.US, it.first, it.second) }
@@ -89,6 +102,11 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
             vivos = if (n.traffic.level == null && previo?.traffic?.level != null) n.copy(traffic = previo.traffic) else n
         }; delay(15_000) }
     }
+    // Tráfico de TomTom (si el servidor tiene la clave): calles coloreadas e incidentes; si no, el de los buses.
+    var incid by remember { mutableStateOf<Incidentes?>(null) }
+    LaunchedEffect(CapasMapa.trafico) { if (CapasMapa.trafico) while (true) { runCatching { Api.incidentes() }.onSuccess { incid = it }; delay(3 * 60_000) } }
+    val tomtom = incid?.source != null
+    val incidCerca = base?.let { b -> incid?.incidents.orEmpty().filter { Ubicacion.metros(it.lat to it.lon, b) < 2500 } }.orEmpty()
     var tocado by remember { mutableStateOf<String?>(null) }
     var siguiendo by remember { mutableStateOf(false) }
     val busesMapa = if (CapasMapa.buses && vivos?.feed?.live == true) vivos!!.buses else emptyList()
@@ -124,7 +142,9 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
                 alTocarPunto = { id -> abrir(Capa.Paradero(id)) },
                 alMover = { c -> centroMapa = c },
                 buses = busesMapa,
-                trafico = CapasMapa.trafico && vivos?.feed?.live == true,
+                trafico = CapasMapa.trafico && !tomtom && vivos?.feed?.live == true,
+                flujo = CapasMapa.trafico && tomtom,
+                incidentes = if (CapasMapa.trafico) incid?.incidents.orEmpty() else emptyList(),
                 alTocarBus = { tocado = it; Tacto.tic() },
                 resaltado = tocado,
                 seguir = if (siguiendo) bus?.let { it.lat to it.lon } else null,
@@ -161,9 +181,26 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
                     }
                 }
             }
+            if (tuyas.isNotEmpty()) item("tuyas") {
+                Tarjeta(Modifier.padding(horizontal = Margen).padding(top = 14.dp), radio = 22.dp, color = Color(0xFFF2A33D).copy(alpha = 0.16f), onClick = { abrir(Capa.Novedades) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Warning, null, tint = Color(0xFFF2A33D), modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Hay cambios en tus rutas", style = LectorType.Section.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text, modifier = Modifier.weight(1f))
+                        Icon(Icons.Rounded.ChevronRight, null, tint = LectorColors.Muted)
+                    }
+                    tuyas.take(3).forEach { (_, titulo, rutas) ->
+                        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Insignia(rutas.first(), null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(titulo, style = LectorType.Label, color = LectorColors.Text, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
             if (Vigia.esperas.isNotEmpty()) item("esperas") { EsperasActivas() }
             item("tullave") { AccesoTarjeta { abrir(Capa.Tarjeta) } }
-            item("vias") { ResumenVias(vivos?.traffic, novedades, { abrir(Capa.Vias) }) { abrir(Capa.Novedades) } }
+            item("vias") { ResumenVias(vivos?.traffic, novedades, incidCerca, { abrir(Capa.Vias) }) { abrir(Capa.Novedades) } }
             val sal = salidas
             if (base != null && cerca?.isNotEmpty() == true) {
                 item("sal-t") { Seccion("Salen cerca de ti") }
@@ -298,7 +335,7 @@ fun EsperasActivas() {
 
 /** Cómo están las vías alrededor: tráfico medido con los buses y novedades del servicio. */
 @Composable
-private fun ResumenVias(t: TraficoZona?, novedades: Int, abrirVias: () -> Unit, abrirNovedades: () -> Unit) {
+private fun ResumenVias(t: TraficoZona?, novedades: Int, incidentes: List<Incidente>, abrirVias: () -> Unit, abrirNovedades: () -> Unit) {
     Tarjeta(Modifier.padding(horizontal = Margen).padding(top = 10.dp), radio = 22.dp, onClick = abrirVias) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             val nivel = t?.level
@@ -315,6 +352,13 @@ private fun ResumenVias(t: TraficoZona?, novedades: Int, abrirVias: () -> Unit, 
                 )
             }
             Icon(Icons.Rounded.ChevronRight, null, tint = LectorColors.Muted)
+        }
+        incidentes.take(2).forEach { i ->
+            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(SuaveShape(4.dp)).background(colorIncidente(i.kind, i.magnitude)))
+                Spacer(Modifier.width(8.dp))
+                Text(textoIncidente(i), style = LectorType.Label, color = LectorColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
         }
         if (novedades > 0) Row(Modifier.padding(top = 10.dp).fillMaxWidth().clip(SuaveShape(14.dp)).background(LectorColors.PillFill).pressable(abrirNovedades).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.Warning, null, tint = Color(0xFFF2A33D), modifier = Modifier.size(18.dp))
@@ -346,7 +390,7 @@ private fun AccesoTarjeta(onClick: () -> Unit) {
 @Composable
 private fun EstadoDatos(feed: Feed?) {
     if (feed == null) return
-    Row(Modifier.padding(horizontal = Margen).clip(SuaveShape(14.dp)).background(LectorColors.Card).padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.clip(SuaveShape(14.dp)).background(LectorColors.Card).padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
         if (feed.live) PuntoVivo() else Icon(Icons.Rounded.Schedule, null, tint = LectorColors.Muted, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(8.dp))
         Text(if (feed.live) "TransMilenio en vivo" else "Sin datos en vivo · según horario", style = LectorType.Label, color = LectorColors.Text)
@@ -902,4 +946,11 @@ private fun DeslizadorProgreso(p: Int) {
     Box(Modifier.fillMaxWidth().height(8.dp).clip(SuaveShape(4.dp)).background(LectorColors.PillFill)) {
         Box(Modifier.fillMaxWidth(p.coerceIn(2, 100) / 100f).fillMaxHeight().clip(SuaveShape(4.dp)).background(acento))
     }
+}
+
+/** «Trancón en Av. Boyacá · 12 min», en palabras de calle. */
+fun textoIncidente(i: Incidente): String {
+    val tipo = when (i.kind) { "trancon" -> "Trancón"; "accidente" -> "Accidente"; "cierre" -> "Vía cerrada"; "obra" -> "Obras"; "peligro" -> "Peligro en la vía"; else -> i.title.ifBlank { "Incidente" } }
+    val donde = listOfNotNull(i.from, i.to).filter { it.isNotBlank() }.distinct().joinToString(" → ")
+    return listOfNotNull(tipo + if (donde.isNotBlank()) " en $donde" else "", i.delay?.takeIf { it >= 60 }?.let { "+${it / 60} min" }).joinToString(" · ")
 }

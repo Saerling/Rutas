@@ -41,6 +41,9 @@ fun ViasScreen(abrir: (Capa) -> Unit, onBack: () -> Unit) {
     var novedades by remember { mutableStateOf<List<Alert>?>(null) }
     LaunchedEffect(Unit) { while (true) { runCatching { Api.novedades().alerts }.onSuccess { novedades = it }; delay(120_000) } }
     var foco by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    var incid by remember { mutableStateOf<Incidentes?>(null) }
+    LaunchedEffect(Unit) { while (true) { runCatching { Api.incidentes() }.onSuccess { incid = it }; delay(3 * 60_000) } }
+    val tomtom = incid?.source != null
 
     MapaConHoja(
         onBack = onBack,
@@ -48,7 +51,8 @@ fun ViasScreen(abrir: (Capa) -> Unit, onBack: () -> Unit) {
         mapa = { abajo, pedido ->
             Mapa(
                 Modifier.fillMaxSize(), centro = Ubicacion.BOGOTA, zoom = 11.2,
-                zonas = dato?.cells.orEmpty(), yo = Ubicacion.actual,
+                zonas = if (tomtom) emptyList() else dato?.cells.orEmpty(), yo = Ubicacion.actual,
+                flujo = tomtom, incidentes = incid?.incidents.orEmpty(),
                 encuadrar = listOfNotNull(foco),
                 abajo = abajo, pedido = pedido, centrarEn = Ubicacion.actual,
             )
@@ -58,7 +62,7 @@ fun ViasScreen(abrir: (Capa) -> Unit, onBack: () -> Unit) {
             item("t") {
                 Column(Modifier.padding(horizontal = Margen)) {
                     Text("Estado de las vías", style = LectorType.Hero, color = LectorColors.Text)
-                    Text("Medido con la velocidad de los buses SITP en vivo. Los troncales no cuentan: van por su carril.", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp))
+                    Text(if (tomtom) "Calles e incidentes de TomTom, y la velocidad de los buses SITP en vivo." else "Medido con la velocidad de los buses SITP en vivo. Los troncales no cuentan: van por su carril.", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp))
                 }
             }
             when {
@@ -103,6 +107,23 @@ fun ViasScreen(abrir: (Capa) -> Unit, onBack: () -> Unit) {
                                 }
                                 Icon(Icons.Rounded.CenterFocusStrong, "Ver en el mapa", tint = LectorColors.Muted, modifier = Modifier.size(18.dp))
                             }
+                        }
+                    }
+                }
+            }
+            val inc = incid?.incidents.orEmpty()
+            if (inc.isNotEmpty()) {
+                item("i-t") { Seccion("Trancones, accidentes y cierres") }
+                items(inc.take(15).size) { k ->
+                    val i = inc[k]
+                    Row(Modifier.fillMaxWidth().resaltable { foco = i.lat to i.lon }.padding(horizontal = Margen, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(38.dp).clip(SuaveShape(12.dp)).background(colorIncidente(i.kind, i.magnitude).copy(alpha = 0.16f)), Alignment.Center) {
+                            Icon(when (i.kind) { "accidente" -> Icons.Rounded.CarCrash; "cierre" -> Icons.Rounded.Block; "obra" -> Icons.Rounded.Construction; "trancon" -> Icons.Rounded.Traffic; else -> Icons.Rounded.Warning }, null, tint = colorIncidente(i.kind, i.magnitude), modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(textoIncidente(i), style = LectorType.Section, color = LectorColors.Text, maxLines = 2)
+                            if (i.title.isNotBlank()) Text(i.title, style = LectorType.Label, color = LectorColors.Muted, maxLines = 1)
                         }
                     }
                 }

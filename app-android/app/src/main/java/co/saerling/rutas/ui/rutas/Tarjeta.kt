@@ -87,7 +87,14 @@ fun TarjetaScreen(onBack: () -> Unit) {
         }
     }
     TarjetaPrueba.dato?.let { d -> LaunchedEffect(d) { estado = TuLlave.Lectura.Ok(d); leidaA = "7:45" } }
-    val clave = when { TarjetaPrueba.dato != null && estado != null -> "Ok"; !conNfc -> "sin"; !activo -> "apagado"; sinTarjeta -> "Tiempo"; else -> estado?.let { it::class.simpleName } ?: "esperando" }
+    // Por tipo, nunca por el nombre de la clase: en el APK final R8 renombra las clases y el nombre deja de ser «Ok».
+    val clave = when {
+        estado is TuLlave.Lectura.Ok -> "Ok"
+        !conNfc -> "sin"; !activo -> "apagado"; sinTarjeta -> "Tiempo"
+        estado is TuLlave.Lectura.NoEsTuLlave -> "NoEsTuLlave"
+        estado is TuLlave.Lectura.SeSolto -> "SeSolto"
+        else -> "esperando"
+    }
 
     LazyColumn(Modifier.fillMaxSize().background(LectorColors.Bg), contentPadding = PaddingValues(bottom = 48.dp)) {
         item("barra") {

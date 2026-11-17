@@ -50,6 +50,8 @@ class CapturasTest {
                 ruta.startsWith("/api/alerts") -> dato("alerts")
                 ruta.startsWith("/api/vehicles") -> dato("vehicles")
                 ruta.startsWith("/api/traffic") -> dato("traffic")
+                ruta.startsWith("/api/news") -> dato("news")
+                ruta.startsWith("/api/incidents") -> "{\"source\":null,\"incidents\":[]}"
                 else -> "[]"
             }
         }
@@ -93,9 +95,14 @@ class CapturasTest {
         capturar("07-viaje") { RutasApp(almacen, capaInicial = Capa.Viaje(plan.itineraries.first())) }
     }
     @Test fun personalizacion() = capturar("08-personalizacion") { RutasApp(almacen, capaInicial = Capa.Personalizacion) }
-    @Test fun novedades() = capturar("13-novedades") { RutasApp(almacen, capaInicial = Capa.Novedades) }
+    @Test fun novedades() {
+        co.saerling.rutas.data.MisRutas.iniciar(RuntimeEnvironment.getApplication())
+        repeat(3) { co.saerling.rutas.data.MisRutas.usar("A642·H642") }
+        capturar("13-novedades") { RutasApp(almacen, capaInicial = Capa.Novedades) }
+    }
     @Test fun guardados() {
         preparar()
+        co.saerling.rutas.data.MisRutas.iniciar(RuntimeEnvironment.getApplication())
         val s = co.saerling.rutas.data.Stop("7107", "Universidad Nacional", "station", 4.637, -74.079)
         if (!co.saerling.rutas.data.Guardados.esParadero(s.id)) co.saerling.rutas.data.Guardados.alternar(s)
         capturar("14-guardados") { RutasApp(almacen, Pestana.Guardados) }

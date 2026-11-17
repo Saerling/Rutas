@@ -33,13 +33,29 @@ import kotlinx.serialization.Serializable
     val bearing: Double? = null, val label: String? = null, val toward: String? = null,
     /** Solo en /api/vehicles: la ruta, la velocidad medida y dónde estaba en el reporte anterior [lon, lat]. */
     val routeId: String? = null, val kmh: Double? = null, val from: List<Double>? = null,
+    /** El tramo recorrido desde el reporte anterior, siguiendo la calle ([lon, lat]). */
+    val trail: List<List<Double>>? = null,
 )
+
+/** Boletín oficial de TransMilenio (su web; lo mismo que publican en WhatsApp y X). */
+@Serializable data class Boletin(
+    val id: String, val title: String, val summary: String = "", val date: String? = null, val url: String = "",
+    val image: String? = null, val routes: List<String> = emptyList(), val stations: List<String> = emptyList(),
+)
+@Serializable data class Noticias(val bulletins: List<Boletin> = emptyList())
+
+/** Incidente vial de TomTom: trancón, accidente, cierre u obra, con su trazo. */
+@Serializable data class Incidente(
+    val id: String, val kind: String = "otro", val title: String = "", val from: String? = null, val to: String? = null,
+    val delay: Int? = null, val magnitude: Int = 0, val lat: Double, val lon: Double, val line: List<List<Double>> = emptyList(),
+)
+@Serializable data class Incidentes(val source: String? = null, val incidents: List<Incidente> = emptyList())
 
 /** Cómo va el tráfico en una zona (velocidad de los buses SITP; los troncales van por su carril). */
 @Serializable data class CeldaTrafico(val lat: Double, val lon: Double, val kmh: Int, val n: Int = 0, val level: String = "fluido", val near: String = "")
 @Serializable data class TraficoZona(val kmh: Int? = null, val n: Int = 0, val level: String? = null, val slow: List<CeldaTrafico> = emptyList())
 @Serializable data class Vehiculos(val feed: Feed = Feed(), val buses: List<Bus> = emptyList(), val traffic: TraficoZona = TraficoZona())
-@Serializable data class Trafico(val feed: Feed = Feed(), val cells: List<CeldaTrafico> = emptyList(), val kmh: Int? = null, val n: Int = 0)
+@Serializable data class Trafico(val feed: Feed = Feed(), val cells: List<CeldaTrafico> = emptyList(), val kmh: Int? = null, val n: Int = 0, val tomtom: Boolean = false)
 
 @Serializable data class StopDetail(val feed: Feed, val stop: Stop, val arrivals: List<Arrival> = emptyList(), val incoming: List<Bus> = emptyList(), val alerts: List<Alert> = emptyList())
 

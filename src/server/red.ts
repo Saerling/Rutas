@@ -284,3 +284,45 @@ export function decodificar(p: string): [number, number][] {
   }
   return out;
 }
+
+// ───────────────────────── Sobre la vía ─────────────────────────
+
+const trazos = new Map<number, [number, number][]>();
+function trazo(p: Patron): [number, number][] {
+  let t = trazos.get(p.i);
+  if (!t) { t = decodificar(p.p); trazos.set(p.i, t); }
+  return t;
+}
+
+/** Un punto pegado al trazado de un recorrido: dónde queda, hacia dónde apunta la vía y en qué tramo va. */
+export interface EnVia { lat: number; lon: number; rumbo: number; i: number; f: number; d: number }
+
+/**
+ * Pega un punto GPS a la vía por donde pasa el recorrido (el GPS de los buses cae a veces sobre las manzanas) y da
+ * el rumbo de la calle en ese punto, no el de la recta entre dos paraderos. [cerca] limita la búsqueda alrededor
+ * de un tramo ya conocido.
+ */
+export function enVia(p: Patron, lat: number, lon: number, maxM = 60): EnVia | null {
+  const t = trazo(p);
+  if (t.length < 2) return null;
+  const px = lon * MLON, py = lat * MLAT;
+  let mejor: EnVia | null = null;
+  for (let i = 0; i < t.length - 1; i++) {
+    const a = t[i], b = t[i + 1];
+    const { d, f } = aSegmento(px, py, a[0] * MLON, a[1] * MLAT, b[0] * MLON, b[1] * MLAT);
+    if (d > maxM || (mejor && d >= mejor.d)) continue;
+    if (a[0] === b[0] && a[1] === b[1]) continue;
+    mejor = { lat: a[1] + (b[1] - a[1]) * f, lon: a[0] + (b[0] - a[0]) * f, rumbo: Math.round(rumbo(a[1], a[0], b[1], b[0])), i, f, d };
+  }
+  return mejor;
+}
+
+/** El pedazo de trazado entre dos puntos pegados a la vía, en orden de recorrido ([lon, lat]). Null si va hacia atrás o es muy largo. */
+export function tramoEntre(p: Patron, a: EnVia, b: EnVia, maxM = 1500): [number, number][] | null {
+  if (b.i < a.i || (b.i === a.i && b.f < a.f)) return null;
+  const t = trazo(p);
+  const out: [number, number][] = [[a.lon, a.lat], ...t.slice(a.i + 1, b.i + 1), [b.lon, b.lat]];
+  let largo = 0;
+  for (let k = 1; k < out.length; k++) largo += metros(out[k - 1][1], out[k - 1][0], out[k][1], out[k][0]);
+  return largo <= maxM ? out : null;
+}

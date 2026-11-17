@@ -120,6 +120,8 @@ export interface LiveBus extends Bus {
   kmh?: number | null;
   /** Dónde estaba en el reporte anterior [lon, lat]: el tramo que acaba de recorrer. */
   from?: [number, number] | null;
+  /** El tramo recorrido desde el reporte anterior, siguiendo la calle ([lon, lat]). */
+  trail?: [number, number][] | null;
 }
 
 export type TrafficLevel = "fluido" | "moderado" | "lento";
@@ -146,6 +148,8 @@ export interface Traffic {
   cells: TrafficCell[];
   kmh: number | null;
   n: number;
+  /** Si el servidor tiene tráfico de TomTom (mosaicos en /api/tiles e incidentes en /api/incidents). */
+  tomtom?: boolean;
 }
 
 export interface Nearby {

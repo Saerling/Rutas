@@ -3,7 +3,8 @@ import { dedupeRoutes, describeRoute } from "@/transit/codes";
 import type { Alert, Arrival, Bus, Feed, Health, IncomingBus, LiveBus, Nearby, Traffic, TrafficCell, TrafficLevel, Vehicles, RouteDetail, RouteRef, SearchResult, Stop, StopDetail } from "@/transit/types";
 
 import type { AlertaRt, Vehiculo } from "./gtfsrt";
-import { alertas, decodificar, faltan, marchas, metros, normalizar, pasadasHoy, posiciones, red, relojBogota, rumbo, ubicar, type Patron, type Red } from "./red";
+import { conTomTom } from "./tomtom";
+import { alertas, decodificar, enVia, faltan, marchas, metros, tramoEntre, normalizar, pasadasHoy, posiciones, red, relojBogota, rumbo, ubicar, type Patron, type Red, type Ubicado } from "./red";
 
 /**
  * Todo sale de los datos abiertos de TransMilenio: el GTFS (índice "red") y sus feeds de GTFS Realtime.
@@ -106,18 +107,32 @@ function nombreParada(rd: Red, id: string): string | null {
   return i === undefined ? null : rd.paradas[publica(rd, i)][1];
 }
 
-function aBus(rd: Red, v: Vehiculo): Bus {
-  const u = ubicar(rd, v);
+/** [u]: el recorrido ya calculado (ubicar() actualiza el rastro del bus, así que no se llama dos veces). */
+function aBus(rd: Red, v: Vehiculo, u: Ubicado | null = ubicar(rd, v)): Bus {
   let bearing: number | null = null;
   let nextStop = nombreParada(rd, v.paradaId);
-  if (u && u.k + 1 < u.patron.s.length) {
-    const a = rd.paradas[u.patron.s[u.k]], b = rd.paradas[u.patron.s[u.k + 1]];
-    bearing = Math.round(rumbo(a[2], a[3], b[2], b[3]));
-    nextStop = rd.paradas[publica(rd, u.patron.s[u.k + 1])][1];
+  let lat = v.lat, lon = v.lon;
+  if (u) {
+    // Sobre la vía: posición pegada a la calle y rumbo de la calle (no la recta entre paraderos).
+    const via = enVia(u.patron, v.lat, v.lon);
+    if (via) { lat = via.lat; lon = via.lon; bearing = via.rumbo; }
+    if (u.k + 1 < u.patron.s.length) {
+      nextStop = rd.paradas[publica(rd, u.patron.s[u.k + 1])][1];
+      if (bearing === null) {
+        const a = rd.paradas[u.patron.s[u.k]], b = rd.paradas[u.patron.s[u.k + 1]];
+        bearing = Math.round(rumbo(a[2], a[3], b[2], b[3]));
+      }
+    }
+  } else {
+    // Sin recorrido seguro: el rumbo de lo que acaba de moverse, si se movió.
+    const m = marchas.get(v.id);
+    if (m && m.ts === v.ts && metros(m.desde[1], m.desde[0], v.lat, v.lon) > 30) bearing = Math.round(rumbo(m.desde[1], m.desde[0], v.lat, v.lon));
   }
   const toward = u ? rd.paradas[publica(rd, u.patron.s[u.patron.s.length - 1])][1] : null;
-  return { id: v.id, lat: v.lat, lon: v.lon, nextStop, plate: v.placa || null, reportedAt: iso(v.ts), bearing, label: v.etiqueta || null, toward };
+  return { id: v.id, lat: round5(lat), lon: round5(lon), nextStop, plate: v.placa || null, reportedAt: iso(v.ts), bearing, label: v.etiqueta || null, toward };
 }
+
+const round5 = (x: number) => Math.round(x * 1e5) / 1e5;
 
 export async function stopDetail(stopId: string): Promise<StopDetail | null> {
   const rd = await red();
@@ -269,8 +284,15 @@ function vivoDe(rd: Red, v: Vehiculo): LiveBus | null {
   const m = marchas.get(v.id);
   // En las primeras paradas el bus suele estar esperando turno en la terminal: su velocidad no dice nada del tráfico.
   // Y si no está sobre su recorrido, está en el patio.
-  const fresca = m && m.ts === v.ts && v.secuencia > 2 && ubicar(rd, v) ? m : null;
-  return { ...aBus(rd, v), routeId: v.rutaId, code: r.code, system: r.system, kmh: fresca?.kmh ?? null, from: fresca?.desde ?? null };
+  const u = ubicar(rd, v);
+  const fresca = m && m.ts === v.ts && v.secuencia > 2 && u ? m : null;
+  // El tramo que acaba de recorrer, siguiendo la calle (sirve para pintar el tráfico y animar el bus por la vía).
+  let trail: [number, number][] | null = null;
+  if (u && m && m.ts === v.ts) {
+    const a = enVia(u.patron, m.desde[1], m.desde[0]), b = enVia(u.patron, v.lat, v.lon);
+    if (a && b) trail = tramoEntre(u.patron, a, b)?.map(([x, y]) => [round5(x), round5(y)] as [number, number]) ?? null;
+  }
+  return { ...aBus(rd, v, u), routeId: v.rutaId, code: r.code, system: r.system, kmh: fresca?.kmh ?? null, from: fresca?.desde ?? null, trail };
 }
 
 /** El paradero visible más cercano a un punto, para nombrar una zona. */
@@ -335,5 +357,5 @@ export async function traffic(): Promise<Traffic> {
   for (const c of cells) if (c.level === "lento") c.near = cercano(rd, c.lat, c.lon);
   const todas = buses.filter(enMarcha).map((b) => b.kmh!);
   const kmh = todas.length >= 10 ? mediana(todas) : null;
-  return { feed: feedDe(pos.ts), cells, kmh: kmh == null ? null : Math.round(kmh), n: todas.length };
+  return { feed: feedDe(pos.ts), cells, kmh: kmh == null ? null : Math.round(kmh), n: todas.length, tomtom: conTomTom() };
 }

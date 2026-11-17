@@ -163,14 +163,18 @@ private fun puntualidad(a: Arrival): String = when {
 }
 
 @Composable
-private fun TarjetaAlerta(a: Alert) {
-    Tarjeta(Modifier.padding(horizontal = Margen).padding(top = 10.dp), radio = 22.dp) {
+private fun TarjetaAlerta(a: Alert, destacada: Boolean = false) {
+    Tarjeta(Modifier.padding(horizontal = Margen).padding(top = 10.dp), radio = 22.dp, color = if (destacada) LectorColors.CardHigh else LectorColors.Card) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.Warning, null, tint = Color(0xFFF2A33D), modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Text(a.title.ifBlank { "Novedad del servicio" }, style = LectorType.Section, color = LectorColors.Text)
         }
         if (a.detail.isNotBlank()) Text(a.detail, style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 6.dp))
+        if (a.routes.isNotEmpty()) {
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { a.routes.take(10).forEach { Insignia(codigoVisible(it), null) } }
+        }
     }
 }
 
@@ -183,6 +187,7 @@ fun RutaScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
     var sentido by remember(id) { mutableIntStateOf(0) }
     var tocado by remember { mutableStateOf<String?>(null) }
     var siguiendo by remember { mutableStateOf(false) }
+    LaunchedEffect(det?.route?.code) { det?.route?.code?.let { MisRutas.usar(it) } }
     val variante = det?.variants?.getOrNull(sentido)
     val paradas = variante?.stops ?: det?.stops.orEmpty()
     val trazo = variante?.path ?: det?.path.orEmpty()
@@ -357,9 +362,27 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
             if (!Ubicacion.tienePermiso(ctx)) { add(Manifest.permission.ACCESS_FINE_LOCATION); add(Manifest.permission.ACCESS_COARSE_LOCATION) }
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }
+        it.legs.filter { l -> l.mode == "transit" }.forEach { l -> MisRutas.usar(codigoVisible(l.code, l.headsign), 3) }
         if (pedir.isEmpty()) { GuiaViaje.empezar(ctx, it); Avisos.mostrar("Te avisamos cuando debas bajarte, aunque bloquees el celular.") }
         else permisos.launch(pedir.toTypedArray())
     }
+    // El bus que vas a tomar (o en el que vas), en vivo: los de esa ruta cerca de donde lo tomas o de donde estás.
+    val tramoBus = (guia as? Guia.EnBus)?.let { g -> it.legs.getOrNull(g.tramo) }
+        ?: (guia as? Guia.Caminando)?.let { g -> it.legs.drop(g.tramo).firstOrNull { l -> l.mode == "transit" } }
+        ?: it.legs.firstOrNull { l -> l.mode == "transit" }
+    var busesViaje by remember { mutableStateOf<List<Bus>>(emptyList()) }
+    LaunchedEffect(tramoBus?.code, tramoBus?.from?.name) {
+        val l = tramoBus ?: return@LaunchedEffect
+        val mios = MisRutas.fichas(codigoVisible(l.code, l.headsign)) + MisRutas.fichas(l.code.orEmpty())
+        while (true) {
+            val centro = if (guia is Guia.EnBus) Ubicacion.actual ?: (l.from.lat to l.from.lon) else l.from.lat to l.from.lon
+            runCatching { Api.vehiculos(centro.first, centro.second, 3000) }.onSuccess { r ->
+                busesViaje = if (!r.feed.live) emptyList() else r.buses.filter { b -> MisRutas.fichas(b.code.orEmpty()).any { f -> f in mios } }
+            }
+            delay(15_000)
+        }
+    }
+    var tocadoViaje by remember { mutableStateOf<String?>(null) }
     Box {
         MapaConHoja(
             onBack = onBack,
@@ -367,7 +390,8 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
             mapa = { abajo, pedido ->
                 val yo = Ubicacion.actual
                 Mapa(
-                    Modifier.fillMaxSize(), centro = it.legs.first().from.let { s -> s.lat to s.lon }, zoom = 13.0,
+                    Modifier.fillMaxSize(), buses = busesViaje, alTocarBus = { b -> tocadoViaje = if (tocadoViaje == b) null else b; Tacto.tic() }, resaltado = tocadoViaje,
+                    centro = it.legs.first().from.let { s -> s.lat to s.lon }, zoom = 13.0,
                     puntos = it.legs.filter { l -> l.mode == "transit" }.flatMapIndexed { k, l -> val e = l.system == "troncal" || l.system == "dual"; listOf(PuntoMapa("a$k", l.from.lat, l.from.lon, true, e), PuntoMapa("b$k", l.to.lat, l.to.lon, true, e)) },
                     tramos = it.legs.map { l -> TramoMapa(l.path, if (l.mode == "transit") colorSistema(l.system) else LectorColors.Muted, discontinuo = l.mode != "transit") },
                     yo = yo, encuadrar = it.legs.flatMap { l -> listOf(l.from.lat to l.from.lon, l.to.lat to l.to.lon) },
@@ -381,6 +405,10 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
                     Column(Modifier.padding(horizontal = Margen)) {
                         Text(duracion(it.minutes), style = LectorType.Display, color = LectorColors.Text)
                         Text("${hora(it.start)} – ${hora(it.end)} · ${if (it.transfers == 0) "directo" else "${it.transfers} transbordo${if (it.transfers > 1) "s" else ""}"} · ${it.walkMetres} m a pie", style = LectorType.Body, color = LectorColors.Muted)
+                        if (busesViaje.isNotEmpty() && tramoBus != null) Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            PuntoVivo(7.dp); Spacer(Modifier.width(6.dp))
+                            Text("${busesViaje.size} bus${if (busesViaje.size > 1) "es" else ""} ${codigoVisible(tramoBus.code, tramoBus.headsign)} en vía cerca · míralos en el mapa", style = LectorType.Label, color = LectorColors.Text)
+                        }
                         val p = it.pasaje()
                         if (p > 0) Text("Pasaje aproximado ${pesos(p)} (sin descuentos de transbordo)", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp))
                         Spacer(Modifier.height(16.dp))
@@ -492,29 +520,73 @@ private fun PasoViaje(l: Leg, actual: Boolean, modifier: Modifier) {
 
 // ───────────────────────────────────────── Novedades ─────────────────────────────────────────
 
-/** Desvíos, cierres y cambios de servicio vigentes en toda la red, como en la app oficial. */
+/**
+ * Novedades: lo que TransMilenio reporta en vivo (GTFS Realtime) y sus boletines oficiales (la misma información que
+ * publica en WhatsApp y X, leída de transmilenio.gov.co). Arriba, lo que toca tus rutas o tus estaciones.
+ */
 @Composable
 fun NovedadesScreen(abrir: (Capa) -> Unit, onBack: () -> Unit) {
+    val ctx = LocalContext.current
     var intento by remember { mutableIntStateOf(0) }
     val (dato, error) = rememberSondeo("novedades", intento, 120_000) { Api.novedades() }
+    val (noticias, _) = rememberSondeo("boletines", intento, 15 * 60_000) { Api.noticias() }
     var filtro by remember { mutableStateOf("") }
-    PaginaPestana("Novedades", "Desvíos y cambios en el servicio", atras = onBack) {
+    val q = filtro.trim().lowercase()
+    val alertas = dato?.alerts.orEmpty().filter { a -> q.isEmpty() || a.routes.any { it.lowercase().contains(q) } || a.title.lowercase().contains(q) || a.detail.lowercase().contains(q) }
+    val boletines = noticias?.bulletins.orEmpty().filter { b -> q.isEmpty() || b.routes.any { it.lowercase().contains(q) } || b.title.lowercase().contains(q) || b.summary.lowercase().contains(q) }
+    val tuyas = alertas.filter { MisRutas.afectadas(it.routes).isNotEmpty() }
+    val tuyosB = boletines.filter { MisRutas.afectadas(it.routes).isNotEmpty() || MisRutas.estacionesAfectadas(it.stations).isNotEmpty() }
+    PaginaPestana("Novedades", "Desvíos, cierres y cambios del servicio", atras = onBack) {
+        item("f") { Box(Modifier.padding(horizontal = Margen).padding(bottom = 8.dp)) { CampoBusqueda(filtro, { filtro = it }, "Filtrar por ruta, estación o lugar") } }
+        if (tuyas.isNotEmpty() || tuyosB.isNotEmpty()) {
+            item("t-t") { Seccion("Afectan tus rutas") }
+            tuyas.forEachIndexed { k, a -> item("ta$k" + a.id) { TarjetaAlerta(a, destacada = true) } }
+            tuyosB.forEachIndexed { k, b -> item("tb$k" + b.id) { TarjetaBoletin(b, destacada = true) { abrirEnlace(ctx, b.url) } } }
+        }
+        item("v-t") { Seccion("En vivo, del sistema") }
         when {
             error && dato == null -> item("e") { Vacio("No pudimos cargar las novedades", "Revisa tu conexión.", "Reintentar") { intento++ } }
-            dato == null -> item("c") { CargandoFilas(4) }
-            dato.alerts.isEmpty() -> item("v") { Vacio("Todo en orden", "TransMilenio no reporta desvíos ni cierres en este momento.") }
-            else -> {
-                item("f") { Box(Modifier.padding(horizontal = Margen).padding(bottom = 8.dp)) { CampoBusqueda(filtro, { filtro = it }, "Filtrar por ruta o lugar") } }
-                val q = filtro.trim().lowercase()
-                val lista = dato.alerts.filter { a -> q.isEmpty() || a.routes.any { it.lowercase().contains(q) } || a.title.lowercase().contains(q) || a.detail.lowercase().contains(q) }
-                items(lista.size, key = { "n" + lista[it].id }) { i ->
-                    val a = lista[i]
-                    Column {
-                        TarjetaAlerta(a)
-                        if (a.routes.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen + 4.dp).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            a.routes.take(12).forEach { c -> Insignia(c, null) }
-                        }
-                    }
+            dato == null -> item("c") { CargandoFilas(3) }
+            alertas.isEmpty() -> item("v") { Text(if (q.isEmpty()) "TransMilenio no reporta desvíos ni cierres en vivo en este momento." else "Nada en vivo con «$filtro».", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(horizontal = Margen)) }
+            else -> items(alertas.size, key = { "n$it" + alertas[it].id }) { i -> TarjetaAlerta(alertas[i]) }
+        }
+        item("b-t") { Seccion("Boletines de TransMilenio") }
+        when {
+            noticias == null -> item("bc") { CargandoFilas(3) }
+            boletines.isEmpty() -> item("bv") { Text("No hay boletines recientes.", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(horizontal = Margen)) }
+            else -> items(boletines.size, key = { "b$it" + boletines[it].id }) { i -> val b = boletines[i]; TarjetaBoletin(b) { abrirEnlace(ctx, b.url) } }
+        }
+        item("fuente") {
+            Text("Los boletines salen de transmilenio.gov.co, donde TransMilenio publica lo mismo que en su canal de WhatsApp y en X. Algunos avisos de última hora pueden salir primero allá.",
+                style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(horizontal = Margen, vertical = 16.dp))
+        }
+    }
+}
+
+fun abrirEnlace(ctx: android.content.Context, url: String) {
+    runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+}
+
+private val MESES_CORTOS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+fun fechaCorta(iso: String?): String? = iso?.let { runCatching { "${it.substring(8, 10).trimStart('0')} ${MESES_CORTOS[it.substring(5, 7).toInt() - 1]}" }.getOrNull() }
+
+@Composable
+fun TarjetaBoletin(b: Boletin, destacada: Boolean = false, onClick: () -> Unit) {
+    Tarjeta(Modifier.padding(horizontal = Margen).padding(bottom = 10.dp), radio = 22.dp, color = if (destacada) LectorColors.CardHigh else LectorColors.Card, onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Campaign, null, tint = if (destacada) MaterialTheme.colorScheme.primary else LectorColors.Muted, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(listOfNotNull("TransMilenio", fechaCorta(b.date)).joinToString(" · "), style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.weight(1f))
+            Icon(Icons.Rounded.OpenInNew, "Abrir boletín", tint = LectorColors.Muted, modifier = Modifier.size(16.dp))
+        }
+        Text(b.title, style = LectorType.Section, color = LectorColors.Text, modifier = Modifier.padding(top = 6.dp))
+        if (b.summary.isNotBlank()) Text(b.summary, style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp), maxLines = 4, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        if (b.routes.isNotEmpty() || b.stations.isNotEmpty()) {
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                b.routes.take(8).forEach { Insignia(it, null) }
+                b.stations.take(4).forEach { e ->
+                    Text(e, style = LectorType.Label, color = LectorColors.Text, modifier = Modifier.clip(SuaveShape(8.dp)).background(LectorColors.PillFill).padding(horizontal = 8.dp, vertical = 3.dp))
                 }
             }
         }
@@ -535,6 +607,7 @@ private fun Campana(a: Arrival, paraderoId: String, paradero: String) {
     Box(Modifier.padding(start = 6.dp).size(36.dp).clip(SuaveShape(12.dp)).background(if (puesta) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent).pressable {
         if (Build.VERSION.SDK_INT >= 33 && !puesta) permiso.launch(Manifest.permission.POST_NOTIFICATIONS)
         val ahora = Vigia.alternar(ctx, Espera(paraderoId, paradero, a.code, a.system))
+        if (ahora) MisRutas.usar(a.code, 2)
         Tacto.alternar(ahora)
         Avisos.mostrar(if (ahora) "Te avisamos cuando al ${a.code} le falten 3 min" else "Ya no te avisamos del ${a.code}")
     }, Alignment.Center) {

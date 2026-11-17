@@ -76,7 +76,8 @@ fun MapaConHoja(
                     Spacer(Modifier.weight(1f))
                     acciones?.invoke(this)
                 }
-                fijo?.invoke()
+                // Sin barra de arriba, la tarjeta fija (bus que tocaste, guía) baja de la barra de estado.
+                if (fijo != null) Box(if (onBack == null && acciones == null) Modifier.statusBarsPadding().padding(top = 60.dp) else Modifier) { fijo() }
             }
         }
     }

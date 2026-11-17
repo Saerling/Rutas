@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
         co.saerling.rutas.ui.rutas.UltimoSaldo.iniciar(applicationContext)
         co.saerling.rutas.data.GuiaServicio.crearCanales(applicationContext)
         co.saerling.rutas.data.Vigia.iniciar(applicationContext)
+        co.saerling.rutas.data.MisRutas.iniciar(applicationContext)
         almacen = Almacen.obtener(applicationContext)
         aplicarBarras(oscuro = almacen.modoTema != ModoTema.CLARO)
         if (savedInstanceState == null) { NuevaVersion.alArrancar(applicationContext); co.saerling.rutas.ui.rutas.Atajo.pedir(intent) }
