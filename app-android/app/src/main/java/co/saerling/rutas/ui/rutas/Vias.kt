@@ -34,7 +34,7 @@ fun ViasScreen(abrir: (Capa) -> Unit, onBack: () -> Unit) {
         // La primera consulta a veces no tiene velocidades aún (se miden entre dos reportes): se vuelve a pedir pronto.
         var espera = 8_000L
         while (true) {
-            runCatching { Api.trafico() }.onSuccess { dato = it; error = false }.onFailure { if (dato == null) error = true }
+            runCatching { Api.trafico() }.onSuccess { n -> if (n.cells.isNotEmpty() || dato == null || !n.feed.live) dato = n; error = false }.onFailure { if (dato == null) error = true }
             delay(if (dato?.cells.isNullOrEmpty()) espera.also { espera = 20_000L } else 30_000L)
         }
     }

@@ -83,7 +83,11 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
     LaunchedEffect(claveBuses, CapasMapa.buses || CapasMapa.trafico) {
         val c = centroBuses ?: return@LaunchedEffect
         if (!CapasMapa.buses && !CapasMapa.trafico) { vivos = null; return@LaunchedEffect }
-        while (true) { runCatching { Api.vehiculos(c.first, c.second, 1800) }.onSuccess { vivos = it }; delay(15_000) }
+        while (true) { runCatching { Api.vehiculos(c.first, c.second, 1800) }.onSuccess { n ->
+            // Una instancia nueva del servidor aún no ha medido velocidades: se conserva la última medición.
+            val previo = vivos
+            vivos = if (n.traffic.level == null && previo?.traffic?.level != null) n.copy(traffic = previo.traffic) else n
+        }; delay(15_000) }
     }
     var tocado by remember { mutableStateOf<String?>(null) }
     var siguiendo by remember { mutableStateOf(false) }
