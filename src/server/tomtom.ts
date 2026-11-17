@@ -1,7 +1,7 @@
 import { CromaError } from "./croma";
 
 /**
- * Tráfico de TomTom (plan gratis: 50 000 mosaicos y 2 500 consultas al día, sin tarjeta). Solo se usa si el servidor
+ * Tráfico de TomTom (plan gratis MENSUAL: 200 000 mosaicos y 2 500 consultas de incidentes, sin tarjeta). Solo se usa si el servidor
  * tiene la variable TOMTOM_KEY; si no, la app sigue con el tráfico medido por los buses.
  * Los mosaicos de flujo pasan por aquí para que la clave no viaje en la app.
  */
@@ -17,7 +17,7 @@ export async function mosaico(z: number, x: number, y: number, oscuro: boolean):
   const estilo = oscuro ? "relative0-dark" : "relative0";
   const r = await fetch(`https://api.tomtom.com/traffic/map/4/tile/flow/${estilo}/${z}/${x}/${y}.png?key=${KEY()}&tileSize=256`, { signal: AbortSignal.timeout(8000) });
   if (!r.ok) return new Response(null, { status: r.status === 429 ? 429 : 502 });
-  return new Response(await r.arrayBuffer(), { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=120, s-maxage=120" } });
+  return new Response(await r.arrayBuffer(), { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=600, s-maxage=600, stale-while-revalidate=1800" } });
 }
 
 export interface Incidente {
@@ -41,7 +41,8 @@ let cache: { en: number; dato: Promise<Incidente[]> } | null = null;
 
 export function incidentes(): Promise<Incidente[]> {
   if (!conTomTom()) return Promise.resolve([]);
-  if (cache && Date.now() - cache.en < 4 * 60_000) return cache.dato;
+  // El plan gratis es MENSUAL (2 500 consultas): una cada 20 min son ~2 200 al mes. La CDN de Vercel guarda lo mismo.
+  if (cache && Date.now() - cache.en < 20 * 60_000) return cache.dato;
   const anterior = cache;
   const campos = "{incidents{type,geometry{type,coordinates},properties{id,iconCategory,magnitudeOfDelay,events{description},from,to,delay}}}";
   const dato = fetch(`https://api.tomtom.com/traffic/services/5/incidentDetails?key=${KEY()}&bbox=${BBOX}&fields=${encodeURIComponent(campos)}&language=es-ES&timeValidityFilter=present`, { signal: AbortSignal.timeout(10_000) })

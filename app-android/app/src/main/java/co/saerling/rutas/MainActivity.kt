@@ -58,6 +58,9 @@ class MainActivity : ComponentActivity() {
         setContent(parent = recompositor) { App(almacen) { aplicarBarras(it) } }
     }
 
+    override fun onStart() { super.onStart(); co.saerling.rutas.data.Visible.en.value = true }
+    override fun onStop() { co.saerling.rutas.data.Visible.en.value = false; super.onStop() }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         co.saerling.rutas.ui.rutas.Atajo.pedir(intent)

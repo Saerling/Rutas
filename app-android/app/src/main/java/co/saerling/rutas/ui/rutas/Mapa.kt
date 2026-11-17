@@ -173,7 +173,7 @@ fun Mapa(
             s.addSource(GeoJsonSource("incidentes"))
             // Flujo de TomTom debajo de todo lo nuestro (encima de las calles del mapa base).
             s.addSource(org.maplibre.android.style.sources.RasterSource("flujo",
-                org.maplibre.android.style.sources.TileSet("2.2.0", co.saerling.rutas.data.Api.mosaicosTrafico(TemaActual.oscuro)).apply { minZoom = 8f; maxZoom = 18f }, 256))
+                org.maplibre.android.style.sources.TileSet("2.2.0", co.saerling.rutas.data.Api.mosaicosTrafico(TemaActual.oscuro)).apply { minZoom = 10f; maxZoom = 16f }, 256))
             s.addLayer(org.maplibre.android.style.layers.RasterLayer("flujo", "flujo").withProperties(rasterOpacity(0.85f), visibility(if (flujoActual.value) "visible" else "none")))
             s.addLayer(LineLayer("incidentes-linea", "incidentes").withProperties(
                 lineColor(Expression.get("color")), lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(11, 2.5f), Expression.stop(16, 7f))),
@@ -307,14 +307,15 @@ fun Mapa(
                 }
             }))
         }
-        val mueve = !co.saerling.rutas.ui.Mov.reducido && datos.any { it.camino.size > 1 }
+        // Con muchos buses en pantalla no se anima (cada cuadro reescribe todos): se ahorra batería.
+        val mueve = !co.saerling.rutas.ui.Mov.reducido && datos.size <= 120 && datos.any { it.camino.size > 1 }
         if (mueve) {
             val t0 = androidx.compose.runtime.withFrameNanos { it }
             while (true) {
                 val f = ((androidx.compose.runtime.withFrameNanos { it } - t0) / 1.4e9).toFloat().coerceIn(0f, 1f)
                 pintar(1f - (1f - f) * (1f - f))
                 if (f >= 1f) break
-                kotlinx.coroutines.delay(32)
+                kotlinx.coroutines.delay(48)
             }
         } else pintar(1f)
         val vivos = buses.map { it.id }.toSet()

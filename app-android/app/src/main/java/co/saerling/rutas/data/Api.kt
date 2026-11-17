@@ -3,6 +3,7 @@ package co.saerling.rutas.data
 import co.saerling.rutas.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -11,6 +12,18 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class ApiError(val codigo: String, mensaje: String) : Exception(mensaje)
+
+/**
+ * Si la app está a la vista. Las consultas de las pantallas esperan aquí mientras está en segundo plano o con la
+ * pantalla apagada: ningún sondeo gasta datos ni batería sin que lo veas. Los servicios (avisos, guía de viaje)
+ * consultan dentro de [EnFondo] y no esperan.
+ */
+object Visible {
+    val en = kotlinx.coroutines.flow.MutableStateFlow(true)
+}
+
+/** Marca una consulta hecha a propósito en segundo plano (servicio de avisos). */
+object EnFondo : kotlin.coroutines.AbstractCoroutineContextElement(EnFondo), kotlin.coroutines.CoroutineContext.Key<EnFondo>
 
 /** Cliente del servidor de Rutas. Las coordenadas salen del teléfono redondeadas a una cuadra (3 decimales). */
 object Api {
@@ -23,7 +36,12 @@ object Api {
     /** Solo para las capturas de prueba: devuelve el JSON de cada ruta sin salir a la red. */
     var simulado: ((String) -> String?)? = null
 
-    private suspend inline fun <reified T> get(ruta: String): T = withContext(Dispatchers.IO) {
+    private suspend inline fun <reified T> get(ruta: String): T {
+        if (kotlin.coroutines.coroutineContext[EnFondo] == null && simulado == null) Visible.en.first { it }
+        return pedir(ruta)
+    }
+
+    private suspend inline fun <reified T> pedir(ruta: String): T = withContext(Dispatchers.IO) {
         simulado?.invoke(ruta)?.let { return@withContext json.decodeFromString<T>(it) }
         http.newCall(Request.Builder().url(BuildConfig.API + ruta).header("Accept", "application/json").build()).execute().use { res ->
             val cuerpo = res.body?.string().orEmpty()

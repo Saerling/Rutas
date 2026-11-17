@@ -165,7 +165,8 @@ export function places(text: string, near: { lat: number; lon: number }): Promis
       const city = (areas.find((a) => a.adminLevel === 8 && named(a)) ?? areas.find((a) => a.adminLevel >= 6 && named(a)))?.name.replace(/^Localidad /, "") ?? null;
       const street = m.street ? [m.street, m.houseNumber].filter(Boolean).join(" ") : null;
       return {
-        id: m.id,
+        // Algunas direcciones llegan sin id: se arma uno estable con el nombre y el punto.
+        id: m.id || `${m.name}@${m.lat.toFixed(5)},${m.lon.toFixed(5)}`,
         name: m.name,
         area: street && street !== m.name ? street : city,
         kind: m.type === "STOP" ? "stop" : m.type === "ADDRESS" ? "address" : "place",

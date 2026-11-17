@@ -42,7 +42,7 @@ fun ViasScreen(abrir: (Capa) -> Unit, onBack: () -> Unit) {
     LaunchedEffect(Unit) { while (true) { runCatching { Api.novedades().alerts }.onSuccess { novedades = it }; delay(120_000) } }
     var foco by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var incid by remember { mutableStateOf<Incidentes?>(null) }
-    LaunchedEffect(Unit) { while (true) { runCatching { Api.incidentes() }.onSuccess { incid = it }; delay(3 * 60_000) } }
+    LaunchedEffect(Unit) { while (true) { runCatching { Api.incidentes() }.onSuccess { incid = it }; delay(10 * 60_000) } }
     val tomtom = incid?.source != null
 
     MapaConHoja(

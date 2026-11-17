@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
@@ -100,11 +101,11 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
             // Una instancia nueva del servidor aún no ha medido velocidades: se conserva la última medición.
             val previo = vivos
             vivos = if (n.traffic.level == null && previo?.traffic?.level != null) n.copy(traffic = previo.traffic) else n
-        }; delay(15_000) }
+        }; delay(20_000) }
     }
     // Tráfico de TomTom (si el servidor tiene la clave): calles coloreadas e incidentes; si no, el de los buses.
     var incid by remember { mutableStateOf<Incidentes?>(null) }
-    LaunchedEffect(CapasMapa.trafico) { if (CapasMapa.trafico) while (true) { runCatching { Api.incidentes() }.onSuccess { incid = it }; delay(3 * 60_000) } }
+    LaunchedEffect(CapasMapa.trafico) { if (CapasMapa.trafico) while (true) { runCatching { Api.incidentes() }.onSuccess { incid = it }; delay(10 * 60_000) } }
     val tomtom = incid?.source != null
     val incidCerca = base?.let { b -> incid?.incidents.orEmpty().filter { Ubicacion.metros(it.lat to it.lon, b) < 2500 } }.orEmpty()
     var tocado by remember { mutableStateOf<String?>(null) }
@@ -124,7 +125,7 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
             salidas = todas.filter { (it.second.minutes ?: 999) <= 60 }.groupBy { it.second.code }.values
                 .map { g -> g.minWith(compareBy({ it.second.minutes ?: 999 }, { it.first.distanceM ?: 9e9 })) }
                 .sortedWith(compareBy({ (it.first.distanceM ?: 0.0) / 80 + (it.second.minutes ?: 99) }))
-            delay(30_000)
+            delay(45_000)
         }
     }
     val gpsApagado = Ubicacion.permiso && yo == null && !Ubicacion.gpsEncendido(ctx)
@@ -249,7 +250,7 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
                 cerca!!.isEmpty() -> item("vacio") { Vacio("No hay paraderos aquí", "Prueba moviendo el mapa.") }
                 else -> {
                     item("lista-t") { Seccion(if (zona != null) "Paraderos en esta zona" else "Paraderos cerca") }
-                    items(cerca.orEmpty(), key = { "c" + it.id }) { s -> FilaParadero(s, { abrir(Capa.Paradero(s.id)) }, Modifier.revelar("c" + s.id)) }
+                    itemsIndexed(cerca.orEmpty(), key = { i, x -> "c$i-" + x.id }) { _, s -> FilaParadero(s, { abrir(Capa.Paradero(s.id)) }, Modifier.revelar("c" + s.id)) }
                 }
             }
         },
@@ -523,11 +524,11 @@ fun IrScreen(abrir: (Capa) -> Unit) {
                     item("trabajo") { val t = Guardados.trabajo; FilaLugar(Icons.Rounded.Work, t?.name ?: "Agrega tu trabajo", if (t != null) "Trabajo" else null) { if (t != null) elegir(t, e) else editando = "trabajo" } }
                 }
                 if (Guardados.recientes.isNotEmpty()) item("rec-t") { Seccion("Recientes") }
-                items(Guardados.recientes, key = { "r" + it.id }) { p -> FilaLugar(Icons.Rounded.History, p.name, p.area) { elegir(p, e) } }
+                itemsIndexed(Guardados.recientes, key = { i, x -> "r$i-" + x.id }) { _, p -> FilaLugar(Icons.Rounded.History, p.name, p.area) { elegir(p, e) } }
             } else when (val l = lugares) {
                 null -> item("c") { CargandoFilas(3) }
                 else -> if (l.isEmpty()) item("n") { Vacio("Nada para «${texto.trim()}»") }
-                    else items(l, key = { "l" + it.id }) { p -> FilaLugar(if (p.kind == "stop") Icons.Rounded.Train else Icons.Rounded.Place, p.name, p.area, Modifier.revelar("l" + p.id)) { elegir(p, e) } }
+                    else itemsIndexed(l, key = { i, x -> "l$i-" + x.id }) { _, p -> FilaLugar(if (p.kind == "stop") Icons.Rounded.Train else Icons.Rounded.Place, p.name, p.area, Modifier.revelar("l" + p.id)) { elegir(p, e) } }
             }
         } else if (hasta == null) {
             item("atajos") {
@@ -598,7 +599,7 @@ fun IrScreen(abrir: (Capa) -> Unit) {
                     }.groupBy { cadena(it) }.values.toList()
                     item("res-t") { Seccion(if (cargando) "Actualizando…" else if (grupos.isEmpty()) "Ninguna con ese filtro" else "Todas las rutas · ${grupos.size} forma${if (grupos.size > 1) "s" else ""} de llegar") }
                     val mejor = grupos.firstOrNull()?.first()
-                    items(grupos, key = { it.first().id }) { g -> TarjetaViaje(g.first(), g.first() == mejor, Modifier.revelar("v" + g.first().id), siguientes = g.drop(1).sortedBy { x -> x.start }.take(3)) { abrir(Capa.Viaje(g.first())) } }
+                    itemsIndexed(grupos, key = { i, x -> "v$i-" + x.first().id }) { _, g -> TarjetaViaje(g.first(), g.first() == mejor, Modifier.revelar("v" + g.first().id), siguientes = g.drop(1).sortedBy { x -> x.start }.take(3)) { abrir(Capa.Viaje(g.first())) } }
                     r.walk?.let { w -> item("pie") { TarjetaViaje(w, false) { abrir(Capa.Viaje(w)) } } }
                     if (r.next != null) item("mas") {
                         Box(Modifier.fillMaxWidth().padding(top = 10.dp), Alignment.Center) {
@@ -788,9 +789,9 @@ fun BuscarScreen(abrir: (Capa) -> Unit) {
             r.routes.isEmpty() && r.stops.isEmpty() -> item("n") { Vacio("Nada para «${texto.trim()}»", "Prueba con el código del bus o el nombre de la estación.") }
             else -> {
                 if (r.routes.isNotEmpty()) item("rt") { Seccion("Rutas") }
-                items(r.routes, key = { "r" + it.id }) { ro -> FilaRuta(ro, Modifier.revelar("br" + ro.id)) { abrir(Capa.Ruta(ro.id)) } }
+                itemsIndexed(r.routes, key = { i, x -> "r$i-" + x.id }) { _, ro -> FilaRuta(ro, Modifier.revelar("br" + ro.id)) { abrir(Capa.Ruta(ro.id)) } }
                 if (r.stops.isNotEmpty()) item("st") { Seccion("Paraderos y estaciones") }
-                items(r.stops, key = { "s" + it.id }) { s -> FilaParadero(s, { abrir(Capa.Paradero(s.id)) }, Modifier.revelar("bs" + s.id)) }
+                itemsIndexed(r.stops, key = { i, x -> "s$i-" + x.id }) { _, s -> FilaParadero(s, { abrir(Capa.Paradero(s.id)) }, Modifier.revelar("bs" + s.id)) }
             }
         }
     }
@@ -828,13 +829,13 @@ fun GuardadosScreen(abrir: (Capa) -> Unit) {
             Guardados.trabajo?.let { t -> item("trab") { FilaQuitable(Icons.Rounded.Work, "Trabajo", t.name, { Planeador.hasta = t; abrir(Capa.IrA) }) { Guardados.ponerTrabajo(null); Avisos.mostrar("Trabajo quitado", "Deshacer") { Guardados.ponerTrabajo(t) } } } }
         }
         if (Guardados.paraderos.isNotEmpty()) item("pt") { Seccion("Paraderos · próximos buses") }
-        items(Guardados.paraderos, key = { "p" + it.id }) { g ->
+        itemsIndexed(Guardados.paraderos, key = { i, x -> "p$i-" + x.id }) { _, g ->
             ParaderoConBuses(g, Modifier.revelar("gp" + g.id), { abrir(Capa.Paradero(g.id)) }) {
                 Guardados.quitarParadero(g.id); Avisos.mostrar("Quitado de guardados", "Deshacer") { Guardados.devolver(g) }
             }
         }
         if (Guardados.rutas.isNotEmpty()) item("rt") { Seccion("Rutas") }
-        items(Guardados.rutas, key = { "r" + it.id }) { g ->
+        itemsIndexed(Guardados.rutas, key = { i, x -> "r$i-" + x.id }) { _, g ->
             Row(Modifier.revelar("gr" + g.id), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { FilaRuta(RouteRef(g.id, code = g.codigo, name = g.nombre, system = g.sistema)) { abrir(Capa.Ruta(g.id)) } }
                 BotonQuitar { Guardados.quitarRuta(g.id); Avisos.mostrar("Ruta quitada", "Deshacer") { Guardados.devolver(g) } }

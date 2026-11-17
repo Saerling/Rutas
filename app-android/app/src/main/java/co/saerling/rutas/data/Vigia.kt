@@ -88,7 +88,7 @@ class VigiaServicio : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         for (e in Vigia.esperas.toList()) {
             if (System.currentTimeMillis() - e.desde > 90 * 60_000) { Vigia.quitar(this, e.clave); continue }
-            val det = runCatching { Api.paradero(e.paradero) }.getOrNull() ?: continue
+            val det = runCatching { withContext(EnFondo) { Api.paradero(e.paradero) } }.getOrNull() ?: continue
             val llegada = det.arrivals.filter { it.code == e.codigo }.minByOrNull { it.minutes ?: Int.MAX_VALUE }
             val m = llegada?.minutes
             if (m == null) continue

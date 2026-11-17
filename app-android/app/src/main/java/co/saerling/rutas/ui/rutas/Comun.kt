@@ -141,14 +141,16 @@ fun Minutos(a: Arrival, grande: Boolean = false) {
     }
 }
 
-/** El punto verde que respira cuando el dato es en vivo. */
+/**
+ * El punto verde de «en vivo». Quieto, con un halo suave: antes cada punto parpadeaba con su propia animación infinita
+ * y, con varias filas en pantalla, el teléfono redibujaba a 60 cuadros por segundo sin parar (batería).
+ */
 @Composable
 fun PuntoVivo(tam: Dp = 8.dp) {
-    val t = rememberInfiniteTransition(label = "vivo")
-    val a by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
     val verde = Color(0xFF34C759)
-    Box(Modifier.size(tam).then(if (co.saerling.rutas.fx.fxOn("pulsating") && !Mov.reducido) Modifier.pulso(verde, tam) else Modifier)
-        .graphicsLayer { alpha = if (Mov.reducido) 1f else a }.clip(CircleShape).background(verde))
+    Box(Modifier.size(tam + 4.dp).clip(CircleShape).background(verde.copy(alpha = 0.25f)), Alignment.Center) {
+        Box(Modifier.size(tam).clip(CircleShape).background(verde))
+    }
 }
 
 /** Fila de paradero o estación: icono, nombre, distancia y las rutas que pasan. */

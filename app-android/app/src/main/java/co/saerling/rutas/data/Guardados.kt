@@ -56,5 +56,5 @@ object Guardados {
     fun quitarRuta(id: String) = guardar(datos.copy(rutas = datos.rutas.filterNot { it.id == id }))
     fun ponerCasa(p: Place?) = guardar(datos.copy(casa = p))
     fun ponerTrabajo(p: Place?) = guardar(datos.copy(trabajo = p))
-    fun recordar(p: Place) = guardar(datos.copy(recientes = (listOf(p) + datos.recientes.filterNot { it.id == p.id }).take(8)))
+    fun recordar(p: Place) = guardar(datos.copy(recientes = (listOf(p) + datos.recientes.filterNot { it.id == p.id && it.name == p.name }).take(8)))
 }
