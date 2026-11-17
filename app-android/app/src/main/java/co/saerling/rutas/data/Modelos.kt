@@ -31,7 +31,15 @@ import kotlinx.serialization.Serializable
     val id: String, val lat: Double, val lon: Double, val nextStop: String? = null, val plate: String? = null,
     val reportedAt: String? = null, val code: String? = null, val system: String? = null,
     val bearing: Double? = null, val label: String? = null, val toward: String? = null,
+    /** Solo en /api/vehicles: la ruta, la velocidad medida y dónde estaba en el reporte anterior [lon, lat]. */
+    val routeId: String? = null, val kmh: Double? = null, val from: List<Double>? = null,
 )
+
+/** Cómo va el tráfico en una zona (velocidad de los buses SITP; los troncales van por su carril). */
+@Serializable data class CeldaTrafico(val lat: Double, val lon: Double, val kmh: Int, val n: Int = 0, val level: String = "fluido", val near: String = "")
+@Serializable data class TraficoZona(val kmh: Int? = null, val n: Int = 0, val level: String? = null, val slow: List<CeldaTrafico> = emptyList())
+@Serializable data class Vehiculos(val feed: Feed = Feed(), val buses: List<Bus> = emptyList(), val traffic: TraficoZona = TraficoZona())
+@Serializable data class Trafico(val feed: Feed = Feed(), val cells: List<CeldaTrafico> = emptyList(), val kmh: Int? = null, val n: Int = 0)
 
 @Serializable data class StopDetail(val feed: Feed, val stop: Stop, val arrivals: List<Arrival> = emptyList(), val incoming: List<Bus> = emptyList(), val alerts: List<Alert> = emptyList())
 

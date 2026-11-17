@@ -93,6 +93,12 @@ fun Mapa(
     alTocarBus: ((String) -> Unit)? = null,
     /** Mientras no sea null, la cámara sigue este punto (el bus que sigues). */
     seguir: Pair<Double, Double>? = null,
+    /** Pinta el tramo que acaba de recorrer cada bus SITP del color de su velocidad (verde, naranja, rojo). */
+    trafico: Boolean = false,
+    /** Zonas de tráfico de toda la ciudad (manchas de color). */
+    zonas: List<co.saerling.rutas.data.CeldaTrafico> = emptyList(),
+    /** El bus resaltado (el que tocaste): se dibuja más grande. */
+    resaltado: String? = null,
 ) {
     if (ModoPrueba.activo) { MapaFalso(modifier, puntos, tramos, buses); return }
     val ctx = LocalContext.current
@@ -157,6 +163,12 @@ fun Mapa(
             s.addSource(GeoJsonSource("puntos"))
             s.addSource(GeoJsonSource("buses"))
             s.addSource(GeoJsonSource("yo"))
+            s.addSource(GeoJsonSource("trafico"))
+            s.addSource(GeoJsonSource("zonas"))
+            s.addLayer(CircleLayer("zonas", "zonas").withProperties(
+                circleColor(Expression.get("color")), circleOpacity(0.38f), circleBlur(0.85f),
+                circleRadius(Expression.interpolate(Expression.exponential(2f), Expression.zoom(), Expression.stop(10, 14f), Expression.stop(13, 60f), Expression.stop(16, 420f))),
+            ))
             s.addLayer(LineLayer("tramos-borde", "tramos").withProperties(lineColor(Expression.get("color")), lineWidth(9f), lineOpacity(0.18f), lineCap("round"), lineJoin("round"), lineBlur(4f)))
             s.addLayer(LineLayer("tramos-linea", "tramos").withProperties(lineColor(Expression.get("color")), lineWidth(4.5f), lineCap("round"), lineJoin("round")).withFilter(Expression.eq(Expression.get("punteado"), false)))
             s.addLayer(LineLayer("tramos-pie", "tramos").withProperties(lineColor(Expression.get("color")), lineWidth(3.5f), lineCap("round"), lineDasharray(arrayOf(0.1f, 2f))).withFilter(Expression.eq(Expression.get("punteado"), true)))
@@ -173,13 +185,23 @@ fun Mapa(
                 iconAnchor(Expression.step(Expression.zoom(), Expression.get("anclaLejos"), Expression.stop(14.6, Expression.literal("bottom")))),
                 iconAllowOverlap(true), iconIgnorePlacement(true), symbolSortKey(Expression.get("orden")),
             ))
-            s.addLayer(SymbolLayer("buses-flecha", "buses").withProperties(
-                iconImage(Expression.get("flecha")), iconRotate(Expression.get("rumbo")), iconRotationAlignment("map"), iconAllowOverlap(true), iconIgnorePlacement(true),
-            ).withFilter(Expression.has("rumbo")))
-            s.addLayer(SymbolLayer("buses", "buses").withProperties(iconImage(Expression.get("icono")), iconAllowOverlap(true), iconIgnorePlacement(true)))
-            s.addLayer(SymbolLayer("buses-codigo", "buses").withProperties(
-                iconImage(Expression.get("etiqueta")), iconAnchor("top"), iconOffset(arrayOf(0f, 14f)), iconAllowOverlap(true), iconIgnorePlacement(true),
+            // Tramo recorrido por cada bus en tráfico mixto, del color de su velocidad (debajo de los buses).
+            s.addLayer(LineLayer("trafico", "trafico").withProperties(
+                lineColor(Expression.get("color")), lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(12, 3f), Expression.stop(17, 8f))),
+                lineOpacity(0.85f), lineCap("round"), lineJoin("round"),
             ))
+            // Buses vistos desde arriba, girados hacia donde van (alineados al mapa) y más grandes al acercarse.
+            s.addLayer(SymbolLayer("buses", "buses").withProperties(
+                iconImage(Expression.get("icono")), iconRotate(Expression.get("rumbo")), iconRotationAlignment("map"), iconPitchAlignment("map"),
+                iconSize(Expression.interpolate(Expression.linear(), Expression.zoom(),
+                    Expression.stop(11, Expression.product(Expression.literal(0.45f), Expression.get("escala"))),
+                    Expression.stop(15, Expression.product(Expression.literal(0.85f), Expression.get("escala"))),
+                    Expression.stop(18, Expression.product(Expression.literal(1.25f), Expression.get("escala"))))),
+                iconAllowOverlap(true), iconIgnorePlacement(true), symbolSortKey(Expression.get("orden")),
+            ))
+            s.addLayer(SymbolLayer("buses-codigo", "buses").withProperties(
+                iconImage(Expression.get("etiqueta")), iconAnchor("top"), iconOffset(arrayOf(0f, 22f)), iconAllowOverlap(true), iconIgnorePlacement(true),
+            ).apply { minZoom = 14f })
             s.addLayer(CircleLayer("yo-halo", "yo").withProperties(circleRadius(14f), circleColor(0xFF4C8DFF.toInt()), circleOpacity(0.2f)))
             s.addLayer(CircleLayer("yo", "yo").withProperties(circleRadius(6.5f), circleColor(0xFF4C8DFF.toInt()), circleStrokeColor(Color.White.toArgb()), circleStrokeWidth(2.5f)))
             estilo = s
@@ -208,18 +230,63 @@ fun Mapa(
             }
         }))
     }
-    LaunchedEffect(estilo, buses) {
+    // Cada bus se desliza de donde estaba a donde está (1,2 s), como los carros de Uber, en vez de saltar.
+    val enPantalla = remember { HashMap<String, Pair<Double, Double>>() }
+    LaunchedEffect(estilo, buses, resaltado) {
         val s = estilo ?: return@LaunchedEffect
-        s.getSourceAs<GeoJsonSource>("buses")?.setGeoJson(FeatureCollection.fromFeatures(buses.map { b ->
+        val fuente = s.getSourceAs<GeoJsonSource>("buses") ?: return@LaunchedEffect
+        val datos = buses.map { b ->
             val color = colorSistema(b.system).toArgb()
             val hex = String.format("%06X", 0xFFFFFF and color)
+            val art = b.system == "troncal" || b.system == "dual"
+            val icono = "bus-$hex-${if (art) "a" else "n"}"
             val codigo = b.code.orEmpty()
-            if (s.getImage("bus-$hex") == null) { s.addImage("bus-$hex", IconosMapa.busCirculo(ctx, color)); s.addImage("flecha-$hex", IconosMapa.flecha(ctx, color)) }
+            if (s.getImage(icono) == null) s.addImage(icono, IconosMapa.busArriba(ctx, color, art))
             if (s.getImage("et-$codigo-$hex") == null) s.addImage("et-$codigo-$hex", IconosMapa.etiqueta(ctx, codigo, color))
-            Feature.fromGeometry(Point.fromLngLat(b.lon, b.lat)).apply {
-                addStringProperty("id", b.id); addStringProperty("icono", "bus-$hex"); addStringProperty("flecha", "flecha-$hex"); addStringProperty("etiqueta", "et-$codigo-$hex")
-                b.bearing?.let { addNumberProperty("rumbo", it) }
+            val antes = enPantalla[b.id]?.takeIf { p -> co.saerling.rutas.ui.rutas.metrosEntre(p, b.lat to b.lon) < 900 }
+            Triple(b, antes ?: (b.lat to b.lon), icono to "et-$codigo-$hex")
+        }
+        fun pintar(t: Float) {
+            fuente.setGeoJson(FeatureCollection.fromFeatures(datos.map { (b, a, im) ->
+                val lat = a.first + (b.lat - a.first) * t; val lon = a.second + (b.lon - a.second) * t
+                enPantalla[b.id] = lat to lon
+                Feature.fromGeometry(Point.fromLngLat(lon, lat)).apply {
+                    addStringProperty("id", b.id); addStringProperty("icono", im.first); addStringProperty("etiqueta", im.second)
+                    addNumberProperty("rumbo", b.bearing ?: 0.0)
+                    addNumberProperty("escala", if (b.id == resaltado) 1.35 else 1.0)
+                    addNumberProperty("orden", if (b.id == resaltado) 2 else 1)
+                }
+            }))
+        }
+        val mueve = !co.saerling.rutas.ui.Mov.reducido && datos.any { (b, a, _) -> a.first != b.lat || a.second != b.lon }
+        if (mueve) {
+            val t0 = androidx.compose.runtime.withFrameNanos { it }
+            while (true) {
+                val f = ((androidx.compose.runtime.withFrameNanos { it } - t0) / 1.2e9).toFloat().coerceIn(0f, 1f)
+                pintar(1f - (1f - f) * (1f - f) * (1f - f))
+                if (f >= 1f) break
+                kotlinx.coroutines.delay(32)
             }
+        } else pintar(1f)
+        val vivos = buses.map { it.id }.toSet()
+        enPantalla.keys.retainAll(vivos)
+    }
+    LaunchedEffect(estilo, buses, trafico) {
+        val s = estilo ?: return@LaunchedEffect
+        val mixto = setOf("zonal_urbano", "zonal_complementario", "zonal_especial", "alimentador")
+        s.getSourceAs<GeoJsonSource>("trafico")?.setGeoJson(FeatureCollection.fromFeatures(if (!trafico) emptyList() else buses.mapNotNull { b ->
+            val f = b.from ?: return@mapNotNull null
+            val k = b.kmh ?: return@mapNotNull null
+            if (b.system !in mixto || f.size < 2) return@mapNotNull null
+            Feature.fromGeometry(LineString.fromLngLats(listOf(Point.fromLngLat(f[0], f[1]), Point.fromLngLat(b.lon, b.lat)))).apply {
+                addStringProperty("color", hexTrafico(nivelTrafico(k.toInt())))
+            }
+        }))
+    }
+    LaunchedEffect(estilo, zonas) {
+        val s = estilo ?: return@LaunchedEffect
+        s.getSourceAs<GeoJsonSource>("zonas")?.setGeoJson(FeatureCollection.fromFeatures(zonas.map { z ->
+            Feature.fromGeometry(Point.fromLngLat(z.lon, z.lat)).apply { addStringProperty("color", hexTrafico(z.level)) }
         }))
     }
     LaunchedEffect(estilo, yo) {
@@ -258,7 +325,7 @@ private fun MapaFalso(modifier: Modifier, puntos: List<PuntoMapa>, tramos: List<
     val ctx = LocalContext.current
     val oscuro = TemaActual.oscuro
     val iconos = remember(puntos, oscuro) { puntos.associate { it.id to IconosMapa.placa(ctx, it.estacion, it.fuerte, oscuro).asImageBitmap() } }
-    val iconosBus = remember(buses) { buses.map { b -> val c = colorSistema(b.system).toArgb(); Triple(IconosMapa.busCirculo(ctx, c).asImageBitmap(), IconosMapa.etiqueta(ctx, b.code.orEmpty(), c).asImageBitmap(), IconosMapa.flecha(ctx, c).asImageBitmap()) } }
+    val iconosBus = remember(buses) { buses.map { b -> val c = colorSistema(b.system).toArgb(); IconosMapa.busArriba(ctx, c, b.system == "troncal" || b.system == "dual").asImageBitmap() to IconosMapa.etiqueta(ctx, b.code.orEmpty(), c).asImageBitmap() } }
     androidx.compose.foundation.Canvas(modifier) {
         drawRect(fondo)
         for (i in 0..12) {
@@ -274,10 +341,21 @@ private fun MapaFalso(modifier: Modifier, puntos: List<PuntoMapa>, tramos: List<
         tramos.forEach { t -> t.puntos.zipWithNext { a, b -> drawLine(t.color, pos(a[0], a[1]), pos(b[0], b[1]), 10f, cap = androidx.compose.ui.graphics.StrokeCap.Round) } }
         puntos.forEach { p -> iconos[p.id]?.let { im -> val o = pos(p.lon, p.lat); drawImage(im, androidx.compose.ui.geometry.Offset(o.x - im.width / 2f, o.y - im.height)) } }
         buses.forEachIndexed { i, b ->
-            val o = pos(b.lon, b.lat); val (c, e, f) = iconosBus[i]
-            b.bearing?.let { r -> rotate(r.toFloat(), o) { drawImage(f, androidx.compose.ui.geometry.Offset(o.x - f.width / 2f, o.y - f.height / 2f)) } }
-            drawImage(c, androidx.compose.ui.geometry.Offset(o.x - c.width / 2f, o.y - c.height / 2f))
-            drawImage(e, androidx.compose.ui.geometry.Offset(o.x - e.width / 2f, o.y + 14 * density))
+            val o = pos(b.lon, b.lat); val (c, e) = iconosBus[i]
+            rotate((b.bearing ?: 0.0).toFloat(), o) { drawImage(c, androidx.compose.ui.geometry.Offset(o.x - c.width / 2f, o.y - c.height / 2f)) }
+            drawImage(e, androidx.compose.ui.geometry.Offset(o.x - e.width / 2f, o.y + 22 * density))
         }
     }
+}
+
+/** Cómo va el tráfico según la velocidad de los buses en tráfico mixto (las paradas incluidas). */
+fun nivelTrafico(kmh: Int) = when { kmh >= 15 -> "fluido"; kmh >= 8 -> "moderado"; else -> "lento" }
+fun colorTrafico(nivel: String?): Color = when (nivel) { "fluido" -> Color(0xFF30B45A); "moderado" -> Color(0xFFF2A33D); "lento" -> Color(0xFFE5484D); else -> Color(0xFF8E8E93) }
+private fun hexTrafico(nivel: String?) = String.format("#%06X", 0xFFFFFF and colorTrafico(nivel).toArgb())
+
+/** Distancia en metros entre dos puntos (lat, lon), aproximada para distancias cortas. */
+fun metrosEntre(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
+    val dy = (a.first - b.first) * 111_320.0
+    val dx = (a.second - b.second) * 111_320.0 * Math.cos(Math.toRadians(a.first))
+    return Math.hypot(dx, dy)
 }

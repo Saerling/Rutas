@@ -80,22 +80,58 @@ object IconosMapa {
         drawCircle(6 * d, 6 * d, 3.8f * d, relleno(if (estacion) 0xFFD7262C.toInt() else 0xFF2F6FC6.toInt()))
     }
 
-    /** Bus en vía: círculo del color de su sistema con el bus en blanco. */
+    /**
+     * Bus visto desde arriba, como los carros de Uber: el frente mira al norte y MapLibre lo gira con el rumbo.
+     * Los troncales y duales son articulados (dos cuerpos y el fuelle). Borde blanco para verse en mapa claro y oscuro.
+     */
+    fun busArriba(c: Context, color: Int, articulado: Boolean): Bitmap {
+        val w = 20f; val h = if (articulado) 58f else 42f
+        return lienzo(c, w, h) { d ->
+            val ox = 3 * d; val bw = (w - 6) * d
+            val vidrio = relleno(0xFF1D2733.toInt())
+            val techo = relleno(0x30FFFFFF)
+            val borde = relleno(0xFFFFFFFF.toInt())
+            fun cuerpo(top: Float, bottom: Float, frente: Boolean, cola: Boolean) {
+                val r = RectF(ox, top, ox + bw, bottom)
+                drawRoundRect(RectF(r.left, r.top + 1.5f * d, r.right, r.bottom + 1.5f * d), 4.5f * d, 4.5f * d, relleno(SOMBRA))
+                drawRoundRect(RectF(r.left - 1.3f * d, r.top - 1.3f * d, r.right + 1.3f * d, r.bottom + 1.3f * d), 5.5f * d, 5.5f * d, borde)
+                drawRoundRect(r, 4.5f * d, 4.5f * d, relleno(color))
+                if (frente) {
+                    // Parabrisas curvo y espejos.
+                    drawRoundRect(RectF(r.left + 1.6f * d, r.top + 1.8f * d, r.right - 1.6f * d, r.top + 7.2f * d), 3f * d, 3f * d, vidrio)
+                    drawRoundRect(RectF(r.left - 2.6f * d, r.top + 3.2f * d, r.left - 0.4f * d, r.top + 5.6f * d), d, d, borde)
+                    drawRoundRect(RectF(r.right + 0.4f * d, r.top + 3.2f * d, r.right + 2.6f * d, r.top + 5.6f * d), d, d, borde)
+                }
+                if (cola) drawRoundRect(RectF(r.left + 2.4f * d, r.bottom - 3.4f * d, r.right - 2.4f * d, r.bottom - 1.4f * d), d, d, vidrio)
+                // Techo: franja clara y la unidad de aire.
+                val t0 = r.top + (if (frente) 9.5f else 2.5f) * d; val t1 = r.bottom - (if (cola) 5f else 2.5f) * d
+                if (t1 > t0) {
+                    drawRoundRect(RectF(r.left + 2.2f * d, t0, r.right - 2.2f * d, t1), 2f * d, 2f * d, techo)
+                    val mid = (t0 + t1) / 2
+                    drawRoundRect(RectF(r.left + 3.4f * d, mid - 3f * d, r.right - 3.4f * d, mid + 3f * d), 1.4f * d, 1.4f * d, relleno(0x55FFFFFF))
+                }
+            }
+            if (!articulado) cuerpo(2 * d, (h - 2) * d, frente = true, cola = true)
+            else {
+                val corte = 30f * d
+                cuerpo(2 * d, corte - 1.6f * d, frente = true, cola = false)
+                cuerpo(corte + 1.6f * d, (h - 2) * d, frente = false, cola = true)
+                // Fuelle: acordeón oscuro entre los dos cuerpos.
+                val f = RectF(ox + 2 * d, corte - 2.4f * d, ox + bw - 2 * d, corte + 2.4f * d)
+                drawRect(f, relleno(0xFF2A2D33.toInt()))
+                val raya = relleno(0xFF5A5F68.toInt())
+                for (k in 0..2) drawRect(f.left, f.top + (0.8f + k * 1.4f) * d, f.right, f.top + (1.3f + k * 1.4f) * d, raya)
+            }
+        }
+    }
+
+    /** Bus en vía: círculo del color de su sistema con el bus en blanco (para listas y la tarjeta del bus). */
     fun busCirculo(c: Context, color: Int): Bitmap = lienzo(c, 34f, 34f) { d ->
         val cx = 17 * d
         drawCircle(cx, cx + 1.5f * d, 13 * d, relleno(SOMBRA))
         drawCircle(cx, cx, 13 * d, relleno(0xFFFFFFFF.toInt()))
         drawCircle(cx, cx, 11 * d, relleno(color))
         bus(cx - 7.5f * d, cx - 7.5f * d, 15 * d, 0xFFFFFFFF.toInt(), color)
-    }
-
-    /** Flecha que rodea el círculo del bus; MapLibre la gira con el rumbo. */
-    fun flecha(c: Context, color: Int): Bitmap = lienzo(c, 50f, 50f) { d ->
-        val cx = 25 * d
-        val f = Path().apply { moveTo(cx, 3 * d); lineTo(cx - 7 * d, 13 * d); lineTo(cx + 7 * d, 13 * d); close() }
-        drawPath(f, relleno(0xFFFFFFFF.toInt()))
-        val g = Path().apply { moveTo(cx, 5.5f * d); lineTo(cx - 4.5f * d, 12 * d); lineTo(cx + 4.5f * d, 12 * d); close() }
-        drawPath(g, relleno(color))
     }
 
     /** Etiqueta con el código, debajo del bus. */

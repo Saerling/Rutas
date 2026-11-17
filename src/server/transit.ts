@@ -1,9 +1,9 @@
 import { humanizeAlert } from "@/transit/alerts";
 import { dedupeRoutes, describeRoute } from "@/transit/codes";
-import type { Alert, Arrival, Bus, Feed, Health, IncomingBus, Nearby, RouteDetail, RouteRef, SearchResult, Stop, StopDetail } from "@/transit/types";
+import type { Alert, Arrival, Bus, Feed, Health, IncomingBus, LiveBus, Nearby, Traffic, TrafficCell, TrafficLevel, Vehicles, RouteDetail, RouteRef, SearchResult, Stop, StopDetail } from "@/transit/types";
 
 import type { AlertaRt, Vehiculo } from "./gtfsrt";
-import { alertas, decodificar, faltan, metros, normalizar, pasadasHoy, posiciones, red, relojBogota, rumbo, ubicar, type Patron, type Red } from "./red";
+import { alertas, decodificar, faltan, marchas, metros, normalizar, pasadasHoy, posiciones, red, relojBogota, rumbo, ubicar, type Patron, type Red } from "./red";
 
 /**
  * Todo sale de los datos abiertos de TransMilenio: el GTFS (índice "red") y sus feeds de GTFS Realtime.
@@ -252,4 +252,88 @@ export async function allAlerts(): Promise<{ alerts: Alert[] }> {
 export async function health(): Promise<Health> {
   const pos = await posiciones();
   return { feed: feedDe(pos.ts) };
+}
+
+// ───────────────────────── Buses en vivo y tráfico ─────────────────────────
+
+const MIXTO = new Set(["zonal_urbano", "zonal_complementario", "zonal_especial", "alimentador", "other"]);
+/** Un bus quieto entre dos reportes casi siempre está parqueado (patio, terminal o parada larga), no en un trancón. */
+const enMarcha = (b: LiveBus) => b.kmh != null && b.kmh >= 1.5 && MIXTO.has(b.system);
+const nivel = (kmh: number): TrafficLevel => (kmh >= 15 ? "fluido" : kmh >= 8 ? "moderado" : "lento");
+const mediana = (v: number[]) => { const s = [...v].sort((a, b) => a - b); return s.length ? s[s.length >> 1] : null; };
+
+function vivoDe(rd: Red, v: Vehiculo): LiveBus | null {
+  const ri = rd.rutaIdx.get(v.rutaId);
+  if (ri === undefined) return null;
+  const r = ref(rd, ri);
+  const m = marchas.get(v.id);
+  // En las primeras paradas el bus suele estar esperando turno en la terminal: su velocidad no dice nada del tráfico.
+  // Y si no está sobre su recorrido, está en el patio.
+  const fresca = m && m.ts === v.ts && v.secuencia > 2 && ubicar(rd, v) ? m : null;
+  return { ...aBus(rd, v), routeId: v.rutaId, code: r.code, system: r.system, kmh: fresca?.kmh ?? null, from: fresca?.desde ?? null };
+}
+
+/** El paradero visible más cercano a un punto, para nombrar una zona. */
+function cercano(rd: Red, lat: number, lon: number): string {
+  let mejor = "", d = Infinity;
+  rd.paradas.forEach((p, i) => {
+    if (Math.abs(p[2] - lat) > 0.006 || Math.abs(p[3] - lon) > 0.006 || p[6]) return;
+    const x = metros(lat, lon, p[2], p[3]);
+    if (x < d && visible(rd, i)) { d = x; mejor = p[1]; }
+  });
+  return mejor;
+}
+
+/** Celdas de ~650 m con la mediana de velocidad de los buses en tráfico mixto (mínimo 3 buses). */
+function celdas(rd: Red, buses: LiveBus[], conNombre: (c: { lat: number; lon: number }) => boolean): TrafficCell[] {
+  const G = 0.006;
+  const grupos = new Map<string, { lat: number[]; lon: number[]; kmh: number[] }>();
+  for (const b of buses) {
+    if (!enMarcha(b)) continue;
+    const k = `${Math.round(b.lat / G)}|${Math.round(b.lon / G)}`;
+    const g = grupos.get(k) ?? { lat: [], lon: [], kmh: [] };
+    g.lat.push(b.lat); g.lon.push(b.lon); g.kmh.push(b.kmh!);
+    grupos.set(k, g);
+  }
+  const out: TrafficCell[] = [];
+  for (const g of grupos.values()) {
+    if (g.kmh.length < 3) continue;
+    const kmh = mediana(g.kmh)!;
+    const c = { lat: g.lat.reduce((a, b) => a + b) / g.lat.length, lon: g.lon.reduce((a, b) => a + b) / g.lon.length };
+    out.push({ lat: Math.round(c.lat * 1e5) / 1e5, lon: Math.round(c.lon * 1e5) / 1e5, kmh: Math.round(kmh), n: g.kmh.length, level: nivel(kmh), near: conNombre(c) ? cercano(rd, c.lat, c.lon) : "" });
+  }
+  return out;
+}
+
+/** Todos los buses en vía en un radio, con su velocidad y cómo va el tráfico ahí. */
+export async function vehicles(lat: number, lon: number, radio: number): Promise<Vehicles> {
+  const [rd, pos] = await Promise.all([red(), posiciones()]);
+  const ahora = Date.now() / 1000;
+  const cerca: [number, LiveBus][] = [];
+  for (const v of pos.vehiculos) {
+    if (ahora - v.ts > VIEJO_S) continue;
+    const d = metros(lat, lon, v.lat, v.lon);
+    if (d > radio) continue;
+    const b = vivoDe(rd, v);
+    if (b) cerca.push([d, b]);
+  }
+  cerca.sort((a, b) => a[0] - b[0]);
+  const buses = cerca.slice(0, 200).map(([, b]) => b);
+  const mixtos = buses.filter(enMarcha).map((b) => b.kmh!);
+  const kmh = mixtos.length >= 3 ? mediana(mixtos) : null;
+  const slow = celdas(rd, buses, () => true).filter((c) => c.level !== "fluido").sort((a, b) => a.kmh - b.kmh).slice(0, 5);
+  return { feed: feedDe(pos.ts), buses, traffic: { kmh: kmh == null ? null : Math.round(kmh), n: mixtos.length, level: kmh == null ? null : nivel(kmh), slow } };
+}
+
+/** Cómo va el tráfico en toda Bogotá, por zonas. */
+export async function traffic(): Promise<Traffic> {
+  const [rd, pos] = await Promise.all([red(), posiciones()]);
+  const ahora = Date.now() / 1000;
+  const buses = pos.vehiculos.filter((v) => ahora - v.ts <= VIEJO_S).map((v) => vivoDe(rd, v)).filter((b): b is LiveBus => b != null);
+  const cells = celdas(rd, buses, () => false);
+  // Solo se nombran las zonas lentas: buscar el paradero de cada celda es lo más caro.
+  for (const c of cells) if (c.level === "lento") c.near = cercano(rd, c.lat, c.lon);
+  const todas = buses.filter(enMarcha).map((b) => b.kmh!);
+  const kmh = todas.length >= 10 ? mediana(todas) : null;
+  return { feed: feedDe(pos.ts), cells, kmh: kmh == null ? null : Math.round(kmh), n: todas.length };
 }

@@ -124,6 +124,7 @@ fun RutasApp(almacen: Almacen, inicial: Pestana = Pestana.Cerca, capaInicial: Ca
                     Capa.BibliotecaFx -> co.saerling.rutas.fx.BibliotecaFxPantalla(remember { catalogoRutas() }, volver)
                     Capa.Tarjeta -> TarjetaScreen(volver)
                     Capa.Novedades -> NovedadesScreen(abrir, volver)
+                    Capa.Vias -> ViasScreen(abrir, volver)
                     Capa.IrA -> Unit
                 }
             }

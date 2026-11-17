@@ -48,6 +48,8 @@ class CapturasTest {
                 ruta.startsWith("/api/routes") -> dato("route")
                 ruta.startsWith("/api/plan") -> dato("plan")
                 ruta.startsWith("/api/alerts") -> dato("alerts")
+                ruta.startsWith("/api/vehicles") -> dato("vehicles")
+                ruta.startsWith("/api/traffic") -> dato("traffic")
                 else -> "[]"
             }
         }
@@ -69,10 +71,17 @@ class CapturasTest {
 
     private val almacen get() = Almacen.obtener(RuntimeEnvironment.getApplication())
 
-    @Test fun cerca() = capturar("01-cerca") { RutasApp(almacen) }
+    @Test fun cerca() { co.saerling.rutas.data.Ubicacion.poner(4.637 to -74.083); capturar("01-cerca") { RutasApp(almacen) } }
     @Test fun ir() {
         Planeador.hasta = co.saerling.rutas.data.Place("x", "Universidad Nacional", "Teusaquillo", "stop", 4.638, -74.084)
         Planeador.desde = co.saerling.rutas.data.Place("y", "Calle 57", "Chapinero", "stop", 4.649, -74.063)
+        val plan = Json { ignoreUnknownKeys = true; coerceInputValues = true }.decodeFromString<PlanResult>(dato("plan"))
+        // Las horas del plan guardado ya pasaron: se corren a ahora para que se vean como en la calle.
+        val t0 = java.time.OffsetDateTime.parse(plan.itineraries.minOf { it.start })
+        val corre = java.time.Duration.between(t0, java.time.OffsetDateTime.now().plusMinutes(3))
+        fun m(s: String) = java.time.OffsetDateTime.parse(s).plus(corre).toString()
+        Planeador.resultado = plan.copy(itineraries = plan.itineraries.map { x -> x.copy(start = m(x.start), end = m(x.end), legs = x.legs.map { l -> l.copy(start = m(l.start), end = m(l.end)) }) }, next = null)
+        Planeador.claveRes = "x|y"
         capturar("02-ir") { RutasApp(almacen, Pestana.Ir) }
     }
     @Test fun buscar() = capturar("03-buscar") { RutasApp(almacen, Pestana.Buscar) }
@@ -92,6 +101,16 @@ class CapturasTest {
         capturar("14-guardados") { RutasApp(almacen, Pestana.Guardados) }
     }
     @Test fun tarjeta() = capturar("12-tarjeta") { RutasApp(almacen, capaInicial = Capa.Tarjeta) }
+    @Test fun tarjetaLeida() {
+        TarjetaPrueba.dato = co.saerling.rutas.data.TuLlave.Tarjeta("1010000012345678", 12400, listOf(
+            co.saerling.rutas.data.TuLlave.Movimiento(co.saerling.rutas.data.TuLlave.Tipo.VIAJE, java.time.LocalDate.now().toString() + "T07:42:10", 3550, 12400),
+            co.saerling.rutas.data.TuLlave.Movimiento(co.saerling.rutas.data.TuLlave.Tipo.RECARGA, java.time.LocalDate.now().toString() + "T07:30:02", 10000, 15950),
+            co.saerling.rutas.data.TuLlave.Movimiento(co.saerling.rutas.data.TuLlave.Tipo.VIAJE, "2026-10-30T18:12:44", 3550, 5950),
+        ))
+        capturar("12b-tarjeta-leida") { RutasApp(almacen, capaInicial = Capa.Tarjeta) }
+        TarjetaPrueba.dato = null
+    }
+    @Test fun vias() = capturar("15-vias") { RutasApp(almacen, capaInicial = Capa.Vias) }
     @Test fun bibliotecaFx() = capturar("11-biblioteca-fx") { RutasApp(almacen, capaInicial = Capa.BibliotecaFx) }
     @Test fun cercaClaro() = capturar("09-cerca-claro", oscuro = false) { RutasApp(almacen) }
     @Test fun actualizacion() = capturar("10-actualizacion") {

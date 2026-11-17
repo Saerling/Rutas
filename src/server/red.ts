@@ -127,11 +127,29 @@ export interface Posiciones { ts: number; vehiculos: Vehiculo[]; porRuta: Map<st
 /** Rastro corto por bus en esta instancia: dice hacia dónde va cuando la ida y la vuelta van por la misma vía. */
 const rastro = new Map<string, { lat: number; lon: number; ts: number }>();
 
+/**
+ * Velocidad real de cada bus: el feed no la trae, así que se compara cada reporte con el anterior del mismo bus
+ * (en esta instancia). Sirve para ver trancones y para animar el bus en el mapa. `desde` es dónde estaba antes.
+ */
+export interface Marcha { kmh: number; desde: [number, number]; ts: number }
+const ultimoReporte = new Map<string, { lat: number; lon: number; ts: number }>();
+export const marchas = new Map<string, Marcha>();
+
 export function posiciones(): Promise<Posiciones> {
   return rt("positions.pb", RT_TTL_MS, (b) => {
     const { ts, vehiculos } = leerFeed(b);
     const porRuta = new Map<string, Vehiculo[]>();
-    for (const v of vehiculos) porRuta.set(v.rutaId, [...(porRuta.get(v.rutaId) ?? []), v]);
+    for (const v of vehiculos) {
+      porRuta.set(v.rutaId, [...(porRuta.get(v.rutaId) ?? []), v]);
+      const antes = ultimoReporte.get(v.id);
+      if (antes && v.ts > antes.ts) {
+        const dt = v.ts - antes.ts;
+        const d = metros(antes.lat, antes.lon, v.lat, v.lon);
+        // Saltos imposibles (GPS que brinca, cambio de bus) no cuentan.
+        if (dt >= 10 && dt <= 300 && d / dt < 25) marchas.set(v.id, { kmh: Math.round((d / dt) * 3.6 * 10) / 10, desde: [antes.lon, antes.lat], ts: v.ts });
+      }
+      if (!antes || v.ts > antes.ts) ultimoReporte.set(v.id, { lat: v.lat, lon: v.lon, ts: v.ts });
+    }
     return { ts, vehiculos, porRuta };
   });
 }

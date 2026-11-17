@@ -53,24 +53,41 @@ object UltimoSaldo {
     }
 }
 
+/** Solo para las capturas de prueba: una tarjeta ya leída. */
+object TarjetaPrueba { var dato: TuLlave.Tarjeta? = null }
+
+/**
+ * TuLlave, como en Paradero: se lee sola al abrir, muestra el saldo grande con la hora de lectura, si quedó debiendo,
+ * el número y los movimientos por mes. Además: cuántos pasajes te alcanzan, el resumen del mes y la tarjeta dibujada.
+ */
 @Composable
 fun TarjetaScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val actividad = ctx as? Activity
     var intento by remember { mutableIntStateOf(0) }
     var estado by remember { mutableStateOf<TuLlave.Lectura?>(null) }
+    var leidaA by remember { mutableStateOf<String?>(null) }
+    var sinTarjeta by remember { mutableStateOf(false) }
     val conNfc = actividad != null && TuLlave.tieneNfc(actividad)
-    val activo = actividad != null && TuLlave.disponible(actividad)
+    // El NFC se puede encender desde los ajustes rápidos sin salir: se revisa cada segundo.
+    var activo by remember { mutableStateOf(actividad != null && TuLlave.disponible(actividad)) }
+    LaunchedEffect(Unit) { while (true) { activo = actividad != null && TuLlave.disponible(actividad); kotlinx.coroutines.delay(1000) } }
     LaunchedEffect(intento, activo) {
         if (actividad == null || !activo) return@LaunchedEffect
-        estado = null
-        val r = TuLlave.leer(actividad)
+        estado = null; sinTarjeta = false
+        val r = kotlinx.coroutines.withTimeoutOrNull(60_000) { TuLlave.leer(actividad) }
+        if (r == null) { sinTarjeta = true; return@LaunchedEffect }
         estado = r
         when (r) {
-            is TuLlave.Lectura.Ok -> { Tacto.alternar(true); UltimoSaldo.guardar(ctx, r.t.saldo) }
+            is TuLlave.Lectura.Ok -> {
+                Tacto.alternar(true); UltimoSaldo.guardar(ctx, r.t.saldo)
+                leidaA = java.time.LocalTime.now().let { "%d:%02d".format(it.hour, it.minute) }
+            }
             else -> Tacto.rechazar()
         }
     }
+    TarjetaPrueba.dato?.let { d -> LaunchedEffect(d) { estado = TuLlave.Lectura.Ok(d); leidaA = "7:45" } }
+    val clave = when { TarjetaPrueba.dato != null && estado != null -> "Ok"; !conNfc -> "sin"; !activo -> "apagado"; sinTarjeta -> "Tiempo"; else -> estado?.let { it::class.simpleName } ?: "esperando" }
 
     LazyColumn(Modifier.fillMaxSize().background(LectorColors.Bg), contentPadding = PaddingValues(bottom = 48.dp)) {
         item("barra") {
@@ -81,34 +98,53 @@ fun TarjetaScreen(onBack: () -> Unit) {
             }
         }
         item("titulo") {
-            Column(Modifier.padding(horizontal = Margen).padding(top = 4.dp, bottom = 18.dp)) {
-                Text("TuLlave", style = LectorType.Display, color = LectorColors.Text)
-                Text("Saldo y últimos movimientos, leídos por NFC. El número no sale del teléfono.", style = LectorType.Body, color = LectorColors.Muted)
-            }
+            Text("Tu TuLlave", style = LectorType.Display, color = LectorColors.Text, modifier = Modifier.padding(horizontal = Margen).padding(top = 4.dp, bottom = 18.dp))
         }
         item("tarjeta") {
             AnimatedContent(
-                targetState = when { !conNfc -> "sin"; !activo -> "apagado"; else -> estado?.let { it::class.simpleName } ?: "esperando" },
+                targetState = clave,
                 transitionSpec = { (fadeIn(tween(260)) + scaleIn(spring(dampingRatio = 0.8f, stiffness = 300f), initialScale = 0.94f)) togetherWith fadeOut(tween(160)) },
                 label = "tullave",
             ) { k ->
                 Column(Modifier.padding(horizontal = Margen)) {
                     when (k) {
-                        "sin" -> Vacio("Este celular no tiene NFC", "Para ver el saldo necesitas un teléfono con NFC.")
+                        "sin" -> Fallo("Este teléfono no lee tarjetas", "Necesitas un teléfono con NFC.", null, null)
                         "apagado" -> Tarjeta(radio = 28.dp) {
                             Icon(Icons.Rounded.Nfc, null, tint = LectorColors.Text, modifier = Modifier.size(30.dp))
                             Text("Activa el NFC", style = LectorType.Hero, color = LectorColors.Text, modifier = Modifier.padding(top = 10.dp))
-                            Text("Está en los ajustes rápidos del celular.", style = LectorType.Body, color = LectorColors.Muted)
+                            Text("Está en los ajustes rápidos del celular. Apenas lo enciendas, empezamos a leer.", style = LectorType.Body, color = LectorColors.Muted)
                             Spacer(Modifier.height(16.dp))
                             BotonExpresivo("Abrir ajustes de NFC", Icons.Rounded.Settings, { ctx.startActivity(Intent(Settings.ACTION_NFC_SETTINGS)) }, estilo = EstiloBoton.RELLENO)
                         }
-                        "Ok" -> (estado as? TuLlave.Lectura.Ok)?.let { Resultado(it.t) { intento++ } }
-                        "NoEsTuLlave" -> Vacio("Esa no es una TuLlave", "Acerca una tarjeta TuLlave personalizada o básica.", "Intentar otra vez") { intento++ }
-                        "SeSolto" -> Vacio("Se soltó la tarjeta", "Déjala quieta contra la parte de atrás hasta que vibre.", "Intentar otra vez") { intento++ }
+                        "Ok" -> (estado as? TuLlave.Lectura.Ok)?.let { Resultado(it.t, leidaA) { intento++ } }
+                        "NoEsTuLlave" -> Fallo("No es una TuLlave", "Esa tarjeta no respondió como una TuLlave. Prueba con tu tarjeta de TransMilenio.", "Leer otra vez") { intento++ }
+                        "SeSolto" -> Fallo("Se movió la tarjeta", "Déjala quieta contra el teléfono hasta que vibre, y vuelve a intentar.", "Leer otra vez") { intento++ }
+                        "Tiempo" -> Fallo("No encontramos la tarjeta", "Acércala más y déjala quieta. Si tiene funda, sácala.", "Leer otra vez") { intento++ }
                         else -> Esperando()
                     }
                 }
             }
+        }
+        item("privado") {
+            Row(Modifier.padding(horizontal = Margen).padding(top = 22.dp), verticalAlignment = Alignment.Top) {
+                Icon(Icons.Rounded.Lock, null, tint = LectorColors.Muted, modifier = Modifier.size(15.dp).padding(top = 2.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("La lectura pasa en tu teléfono. El número de la tarjeta no sale de él y no lo guardamos.", style = LectorType.Label, color = LectorColors.Muted)
+            }
+        }
+    }
+}
+
+@Composable
+private fun Fallo(titulo: String, cuerpo: String, accion: String?, alAccion: (() -> Unit)?) {
+    Column {
+        Column(Modifier.fillMaxWidth().clip(SuaveShape(24.dp)).background(LectorColors.Card).padding(18.dp)) {
+            Text(titulo, style = LectorType.Section.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text)
+            Text(cuerpo, style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp))
+        }
+        if (accion != null && alAccion != null) {
+            Spacer(Modifier.height(14.dp))
+            BotonExpresivo(accion, Icons.Rounded.Contactless, alAccion, Modifier.fillMaxWidth(), estilo = EstiloBoton.RELLENO, alto = 54.dp)
         }
     }
 }
@@ -129,8 +165,8 @@ private fun Esperando() {
             }
             DibujoTarjeta(Modifier.size(170.dp, 108.dp), null)
         }
-        Text("Acerca tu TuLlave", style = LectorType.Hero, color = LectorColors.Text)
-        Text("Ponla contra la parte de atrás del celular, cerca de la cámara, y déjala quieta.", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 6.dp, start = 12.dp, end = 12.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text("Mira el saldo de tu TuLlave", style = LectorType.Hero, color = LectorColors.Text, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text("Acerca la tarjeta a la parte de atrás del teléfono y déjala quieta hasta que vibre.", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 6.dp, start = 12.dp, end = 12.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 
@@ -146,25 +182,83 @@ private fun DibujoTarjeta(modifier: Modifier, numero: String?) {
 }
 
 @Composable
-private fun Resultado(t: TuLlave.Tarjeta, otraVez: () -> Unit) {
+private fun Resultado(t: TuLlave.Tarjeta, leidaA: String?, otraVez: () -> Unit) {
+    val acento = MaterialTheme.colorScheme.primary
+    val ctx = LocalContext.current
     Column {
         DibujoTarjeta(Modifier.fillMaxWidth().aspectRatio(1.586f), t.numero.ifBlank { null })
-        Spacer(Modifier.height(20.dp))
-        Text("SALDO", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp), color = LectorColors.Muted)
-        co.saerling.rutas.fx.NumeroFlow(t.saldo, LectorType.Display.copy(fontSize = 44.sp), color = LectorColors.Text, prefijo = "$")
-        val viajes = t.saldo / PASAJE_COP
-        Text(if (viajes == 0) "No te alcanza para un pasaje ($3.550)" else "Te alcanza para $viajes pasaje${if (viajes > 1) "s" else ""}", style = LectorType.Body, color = LectorColors.Muted)
-        Spacer(Modifier.height(14.dp))
-        BotonExpresivo("Leer otra vez", Icons.Rounded.Refresh, otraVez, estilo = EstiloBoton.TONAL)
-        if (t.movimientos.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            var mes: String? = "-"
-            t.movimientos.forEach { m ->
-                val esteMes = m.fecha?.take(7)
-                if (esteMes != mes) { mes = esteMes; Seccion(nombreMes(esteMes), Modifier.offset(x = (-20).dp)) }
-                FilaMovimiento(m)
+        Spacer(Modifier.height(22.dp))
+        Text("SALDO EN LA TARJETA", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp), color = LectorColors.Muted)
+        Text(if (t.saldo < 0) "−${pesos(-t.saldo)}" else pesos(t.saldo), style = LectorType.Display.copy(fontSize = 46.sp, fontWeight = FontWeight.Bold), color = if (t.saldo < 0) Color(0xFFE5484D) else LectorColors.Text)
+        if (leidaA != null) Text("Leído a las $leidaA", style = LectorType.Label, color = LectorColors.Muted)
+        Spacer(Modifier.height(12.dp))
+        val viajes = (t.saldo / PASAJE_COP).coerceAtLeast(0)
+        Row(Modifier.clip(SuaveShape(14.dp)).background(if (viajes == 0) Color(0xFFE5484D).copy(alpha = 0.14f) else acento.copy(alpha = 0.14f)).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.DirectionsBus, null, tint = if (viajes == 0) Color(0xFFE5484D) else acento, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(if (viajes == 0) "No te alcanza para un pasaje (${pesos(PASAJE_COP)})" else "Te alcanza para $viajes pasaje${if (viajes > 1) "s" else ""}", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text)
+        }
+        if (t.saldo < 0) Nota(Icons.Rounded.Warning, "La tarjeta quedó debiendo ${pesos(-t.saldo)}. Se descuenta de tu próxima recarga.")
+        Nota(Icons.Rounded.Info, "Una recarga en línea aparece aquí cuando la cargas en un validador o un punto de recarga.")
+
+        // Resumen del mes en curso, con lo que guarda la tarjeta (sus últimos movimientos).
+        val mes = java.time.LocalDate.now().toString().take(7)
+        val delMes = t.movimientos.filter { it.fecha?.startsWith(mes) == true }
+        if (delMes.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Dato("Viajes este mes", "${delMes.count { it.tipo == TuLlave.Tipo.VIAJE }}", Modifier.weight(1f))
+                Dato("Gastado", pesos(delMes.filter { it.tipo == TuLlave.Tipo.VIAJE }.sumOf { it.valor }), Modifier.weight(1f))
+                Dato("Recargado", pesos(delMes.filter { it.tipo == TuLlave.Tipo.RECARGA }.sumOf { it.valor }), Modifier.weight(1f))
             }
         }
+
+        if (t.numero.isNotBlank()) {
+            Spacer(Modifier.height(20.dp))
+            Text("NÚMERO DE LA TARJETA", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp), color = LectorColors.Muted)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(TuLlave.agrupar(t.numero), style = LectorType.Section.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp), color = LectorColors.Text, modifier = Modifier.weight(1f))
+                Box(Modifier.size(38.dp).clip(SuaveShape(12.dp)).background(LectorColors.PillFill).pressable {
+                    val cb = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                    cb?.setPrimaryClip(android.content.ClipData.newPlainText("TuLlave", t.numero.uppercase()))
+                    Tacto.tic(); Avisos.mostrar("Número copiado")
+                }, Alignment.Center) { Icon(Icons.Rounded.ContentCopy, "Copiar número", tint = LectorColors.Text, modifier = Modifier.size(18.dp)) }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        BotonExpresivo("Leer otra vez", Icons.Rounded.Contactless, otraVez, Modifier.fillMaxWidth(), estilo = EstiloBoton.TONAL, alto = 50.dp)
+
+        Spacer(Modifier.height(10.dp))
+        Text("ÚLTIMOS MOVIMIENTOS", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp), color = LectorColors.Muted, modifier = Modifier.padding(top = 14.dp))
+        if (t.movimientos.isEmpty()) Text("La tarjeta no tiene movimientos guardados.", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 6.dp))
+        // Por mes, en el orden que los guarda la tarjeta (más nuevo primero); los sin fecha al final.
+        val (conFecha, sinFecha) = t.movimientos.partition { it.fecha != null }
+        (conFecha.groupBy { it.fecha!!.take(7) }.toList() + if (sinFecha.isNotEmpty()) listOf(null to sinFecha) else emptyList()).forEach { (m, lista) ->
+            Text(nombreMes(m).replaceFirstChar { it.uppercase() }, style = LectorType.Section.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text, modifier = Modifier.padding(top = 14.dp, bottom = 2.dp))
+            Column(Modifier.fillMaxWidth().clip(SuaveShape(20.dp)).background(LectorColors.Card).padding(horizontal = 14.dp)) {
+                lista.forEachIndexed { k, mv ->
+                    if (k > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(LectorColors.Linea))
+                    FilaMovimiento(mv)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Nota(icono: androidx.compose.ui.graphics.vector.ImageVector, texto: String) {
+    Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.Top) {
+        Icon(icono, null, tint = LectorColors.Muted, modifier = Modifier.size(15.dp).padding(top = 2.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(texto, style = LectorType.Label, color = LectorColors.Muted)
+    }
+}
+
+@Composable
+private fun Dato(titulo: String, valor: String, modifier: Modifier) {
+    Column(modifier.clip(SuaveShape(18.dp)).background(LectorColors.Card).padding(12.dp)) {
+        Text(valor, style = LectorType.Section.copy(fontWeight = FontWeight.Bold), color = LectorColors.Text, maxLines = 1)
+        Text(titulo, style = LectorType.Label, color = LectorColors.Muted, maxLines = 1)
     }
 }
 
@@ -184,8 +278,11 @@ private fun FilaMovimiento(m: TuLlave.Movimiento) {
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(texto, style = LectorType.Section, color = LectorColors.Text)
-            Text(listOfNotNull(m.fecha?.let { f -> "${f.substring(8, 10)}/${f.substring(5, 7)} · ${f.substring(11, 16)}" }, "quedó ${pesos(m.saldoDespues)}").joinToString(" · "), style = LectorType.Label, color = LectorColors.Muted)
+            Text(m.fecha?.let { f -> "${f.substring(8, 10).trimStart('0')} ${MESES[f.substring(5, 7).toInt() - 1].take(3)} · ${f.substring(11, 16)}" } ?: "Sin fecha", style = LectorType.Label, color = LectorColors.Muted)
         }
-        Text("$signo${pesos(m.valor)}", style = LectorType.Section.copy(fontWeight = FontWeight.SemiBold), color = if (signo == "+") Color(0xFF34C759) else LectorColors.Text)
+        Column(horizontalAlignment = Alignment.End) {
+            Text("$signo${pesos(m.valor)}", style = LectorType.Section.copy(fontWeight = FontWeight.SemiBold), color = if (signo == "+") Color(0xFF34C759) else LectorColors.Text)
+            Text("Quedó en ${pesos(m.saldoDespues)}", style = LectorType.Label, color = LectorColors.Muted)
+        }
     }
 }

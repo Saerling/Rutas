@@ -112,6 +112,42 @@ export interface RouteDetail {
   alerts: Alert[];
 }
 
+/** Un bus en vía cerca de ti, con su ruta y la velocidad a la que va (si hay dos reportes seguidos). */
+export interface LiveBus extends Bus {
+  routeId: string;
+  code: string;
+  system: System;
+  kmh?: number | null;
+  /** Dónde estaba en el reporte anterior [lon, lat]: el tramo que acaba de recorrer. */
+  from?: [number, number] | null;
+}
+
+export type TrafficLevel = "fluido" | "moderado" | "lento";
+
+/** Cómo va el tráfico en una zona, medido con la velocidad de los buses SITP (no los troncales: van por su carril). */
+export interface TrafficCell {
+  lat: number;
+  lon: number;
+  kmh: number;
+  n: number;
+  level: TrafficLevel;
+  /** El paradero más cercano, para decir dónde es. */
+  near: string;
+}
+
+export interface Vehicles {
+  feed: Feed;
+  buses: LiveBus[];
+  traffic: { kmh: number | null; n: number; level: TrafficLevel | null; slow: TrafficCell[] };
+}
+
+export interface Traffic {
+  feed: Feed;
+  cells: TrafficCell[];
+  kmh: number | null;
+  n: number;
+}
+
 export interface Nearby {
   stops: Stop[];
 }

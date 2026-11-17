@@ -22,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +41,7 @@ sealed interface Capa {
     data object BibliotecaFx : Capa
     data object Tarjeta : Capa
     data object Novedades : Capa
+    data object Vias : Capa
     /** No es una página: pide ir a la pestaña Ir con el destino ya puesto. */
     data object IrA : Capa
 }
@@ -79,7 +82,7 @@ fun ParaderoScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
     LaunchedEffect(bus == null) { if (bus == null) siguiendo = false }
     MapaConHoja(
         onBack = onBack,
-        fijo = bus?.let { b -> { TarjetaBus(b, siguiendo, { siguiendo = !siguiendo; Tacto.alternar(siguiendo) }) { tocado = null } } },
+        fijo = bus?.let { b -> { TarjetaBus(b, siguiendo, { siguiendo = !siguiendo; Tacto.alternar(siguiendo) }, verRuta = det?.arrivals?.firstOrNull { it.code == b.code }?.routeId?.let { r -> { abrir(Capa.Ruta(r)) } }) { tocado = null } } },
         acciones = { det?.let { x -> BotonEstrella(Guardados.esParadero(x.stop.id)) { val g = Guardados.alternar(x.stop); Avisos.mostrar(if (g) "Paradero guardado" else "Quitado de guardados") } } },
         mapa = { abajo, pedido ->
             val s = det?.stop
@@ -89,6 +92,7 @@ fun ParaderoScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
                 buses = vienen,
                 yo = Ubicacion.actual, encuadrar = listOfNotNull(s?.let { it.lat to it.lon }),
                 alTocarBus = { tocado = it; Tacto.tic() },
+                resaltado = tocado,
                 seguir = if (siguiendo) bus?.let { it.lat to it.lon } else null,
                 abajo = abajo, pedido = pedido, centrarEn = Ubicacion.actual,
             )
@@ -126,7 +130,7 @@ fun ParaderoScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
                                 Spacer(Modifier.width(12.dp))
                                 Text(primero.name, style = LectorType.Section, color = LectorColors.Text, modifier = Modifier.weight(1f), maxLines = 2)
                                 Minutos(primero, grande = true)
-                                Campana(primero, det.stop.name)
+                                Campana(primero, det.stop.id, det.stop.name)
                             }
                             Text(puntualidad(primero), style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 8.dp))
                         }
@@ -139,7 +143,7 @@ fun ParaderoScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
                             Box(Modifier.widthIn(min = 72.dp)) { Insignia(a.code, a.system) }
                             Text(a.name, style = LectorType.Body, color = LectorColors.Text, modifier = Modifier.weight(1f), maxLines = 1)
                             Minutos(a)
-                            Campana(a, det.stop.name)
+                            Campana(a, det.stop.id, det.stop.name)
                         }
                     }
                     item("rutas-t") { Seccion("Rutas que paran aquí") }
@@ -203,6 +207,7 @@ fun RutaScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
                 encuadrar = trazo.map { it[1] to it[0] }.let { p -> if (p.size > 2) listOf(p.first(), p[p.size / 4], p[p.size / 2], p[p.size * 3 / 4], p.last()) else p },
                 alTocarPunto = { abrir(Capa.Paradero(it)) },
                 alTocarBus = { tocado = it; Tacto.tic() },
+                resaltado = tocado,
                 seguir = if (siguiendo) bus?.let { it.lat to it.lon } else null,
                 abajo = abajo, pedido = pedido, centrarEn = Ubicacion.actual,
             )
@@ -294,26 +299,39 @@ private fun Salidas(horas: List<String>) {
     }
 }
 
-/** El bus que tocaste en el mapa: hacia dónde va, su próxima parada y el botón para seguirlo. */
+/** El bus que tocaste en el mapa: su ruta, hacia dónde va, su próxima parada, a qué velocidad va y el botón para seguirlo. */
 @Composable
-fun TarjetaBus(b: Bus, siguiendo: Boolean, alSeguir: () -> Unit, cerrar: () -> Unit) {
+fun TarjetaBus(b: Bus, siguiendo: Boolean, alSeguir: () -> Unit, verRuta: (() -> Unit)? = null, cerrar: () -> Unit) {
     val color = colorSistema(b.system)
-    Row(
-        Modifier.padding(horizontal = 14.dp).padding(bottom = 10.dp).fillMaxWidth().clip(SuaveShape(24.dp)).background(LectorColors.Card).padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(40.dp).clip(SuaveShape(20.dp)).background(color), Alignment.Center) { Icon(Icons.Rounded.DirectionsBus, null, tint = Color.White, modifier = Modifier.size(22.dp)) }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(listOfNotNull(b.code, b.toward?.let { "hacia $it" }).joinToString(" "), style = LectorType.Section, color = LectorColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            Text(listOfNotNull(b.nextStop?.let { "Próxima: $it" }, b.label, b.plate).joinToString(" · "), style = LectorType.Label, color = LectorColors.Muted, maxLines = 2)
+    val ctx = LocalContext.current
+    val icono = remember(b.system) { IconosMapa.busArriba(ctx, android.graphics.Color.argb(255, (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt()), b.system == "troncal" || b.system == "dual").asImageBitmap() }
+    Column(Modifier.padding(horizontal = 14.dp).padding(bottom = 10.dp).fillMaxWidth().clip(SuaveShape(24.dp)).background(LectorColors.Card).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).clip(SuaveShape(14.dp)).background(color.copy(alpha = 0.14f)), Alignment.Center) {
+                androidx.compose.foundation.Image(icono, null, Modifier.size(18.dp, 38.dp).graphicsLayer { rotationZ = 35f })
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    b.code?.let { Insignia(it, b.system) ; Spacer(Modifier.width(8.dp)) }
+                    Text(b.toward?.let { "hacia $it" } ?: "En vía", style = LectorType.Section, color = LectorColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                Text(listOfNotNull(b.nextStop?.let { "Próxima: $it" }, b.kmh?.let { "${it.toInt()} km/h" }, b.plate).joinToString(" · "), style = LectorType.Label, color = LectorColors.Muted, maxLines = 2, modifier = Modifier.padding(top = 3.dp))
+            }
+            Box(Modifier.size(36.dp).clip(SuaveShape(12.dp)).pressable(cerrar), Alignment.Center) { Icon(Icons.Rounded.Close, "Cerrar", tint = LectorColors.Muted) }
         }
-        Spacer(Modifier.width(8.dp))
-        Box(Modifier.clip(SuaveShape(14.dp)).background(if (siguiendo) MaterialTheme.colorScheme.primary else LectorColors.PillFill).pressable(alSeguir).padding(horizontal = 12.dp, vertical = 9.dp)) {
-            Text(if (siguiendo) "Siguiendo" else "Seguir", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = if (siguiendo) MaterialTheme.colorScheme.onPrimary else LectorColors.Text)
+        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.clip(SuaveShape(14.dp)).background(if (siguiendo) MaterialTheme.colorScheme.primary else LectorColors.PillFill).pressable(alSeguir).padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.CenterFocusStrong, null, tint = if (siguiendo) MaterialTheme.colorScheme.onPrimary else LectorColors.Text, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (siguiendo) "Siguiendo" else "Seguir en el mapa", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = if (siguiendo) MaterialTheme.colorScheme.onPrimary else LectorColors.Text)
+            }
+            if (verRuta != null) Row(Modifier.clip(SuaveShape(14.dp)).background(LectorColors.PillFill).pressable(verRuta).padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Route, null, tint = LectorColors.Text, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Ver ruta", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text)
+            }
         }
-        Spacer(Modifier.width(6.dp))
-        Box(Modifier.size(36.dp).clip(SuaveShape(12.dp)).pressable(cerrar), Alignment.Center) { Icon(Icons.Rounded.Close, "Cerrar", tint = LectorColors.Muted) }
     }
 }
 
@@ -371,10 +389,16 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
                         val salida = runCatching { java.time.OffsetDateTime.parse(it.start).toInstant().toEpochMilli() }.getOrNull()
                         if (!guiando && salida != null && salida - System.currentTimeMillis() > 6 * 60_000) {
                             Spacer(Modifier.height(10.dp))
-                            BotonExpresivo("Avísame 5 min antes de salir", Icons.Rounded.Alarm, {
-                                val primero = it.legs.firstOrNull { l -> l.mode == "transit" }
-                                val cuando = Recordatorio.programar(ctx, salida, "Sal ahora para alcanzar el ${codigoVisible(primero?.code, primero?.headsign)}")
-                                Avisos.mostrar(if (cuando != null) "Te avisamos a las ${hora(java.time.Instant.ofEpochMilli(cuando).atOffset(java.time.ZoneOffset.ofHours(-5)).toString())}" else "Ya casi sale: mejor empieza el viaje")
+                            val puesto = Recordatorio.programados[it.id]
+                            BotonExpresivo(if (puesto != null) "Aviso a las ${hora(java.time.Instant.ofEpochMilli(puesto.second).atOffset(java.time.ZoneOffset.ofHours(-5)).toString())} · quitar" else "Avísame 5 min antes de salir",
+                                if (puesto != null) Icons.Rounded.AlarmOff else Icons.Rounded.Alarm, {
+                                if (puesto != null) { Recordatorio.quitar(ctx, it.id); Tacto.alternar(false); Avisos.mostrar("Aviso quitado") }
+                                else {
+                                    val primero = it.legs.firstOrNull { l -> l.mode == "transit" }
+                                    val cuando = Recordatorio.programar(ctx, salida, "Sal ahora para alcanzar el ${codigoVisible(primero?.code, primero?.headsign)}", it.id)
+                                    Tacto.alternar(cuando != null)
+                                    Avisos.mostrar(if (cuando != null) "Te avisamos a las ${hora(java.time.Instant.ofEpochMilli(cuando).atOffset(java.time.ZoneOffset.ofHours(-5)).toString())}" else "Ya casi sale: mejor empieza el viaje")
+                                }
                             }, Modifier.fillMaxWidth(), estilo = EstiloBoton.TONAL)
                         }
                     }
@@ -497,23 +521,24 @@ fun NovedadesScreen(abrir: (Capa) -> Unit, onBack: () -> Unit) {
     }
 }
 
-/** Campana de Moovit: te avisa unos 3 minutos antes de que llegue ese bus (con lo que se sabe ahora). */
+/**
+ * Campana de Moovit, en vivo: el Vigía consulta cada 20 s cuánto le falta a esa ruta en este paradero y avisa
+ * cuando está a 3 min. Tocarla otra vez la quita. El estado sale del Vigía, así no se pierde cuando la lista se refresca.
+ */
 @Composable
-private fun Campana(a: Arrival, paradero: String) {
+private fun Campana(a: Arrival, paraderoId: String, paradero: String) {
     val ctx = LocalContext.current
-    val llega = runCatching { java.time.OffsetDateTime.parse(a.at).toInstant().toEpochMilli() }.getOrNull() ?: return
-    if (llega - System.currentTimeMillis() < 5 * 60_000) return
-    var puesta by remember(a.code, a.at) { mutableStateOf(false) }
+    val puesta = Vigia.esperando(paraderoId, a.code)
+    val m = a.minutes
+    if (!puesta && (m == null || m <= 3)) { Spacer(Modifier.width(42.dp)); return }
     val permiso = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    Box(Modifier.padding(start = 6.dp).size(36.dp).clip(SuaveShape(12.dp)).pressable {
-        if (Build.VERSION.SDK_INT >= 33) permiso.launch(Manifest.permission.POST_NOTIFICATIONS)
-        // programar() avisa 5 min antes de la hora dada: se corre 2 min para que suene ~3 min antes de que llegue.
-        val cuando = Recordatorio.programar(ctx, llega + 2 * 60_000, "El ${a.code} llega en unos 3 min a $paradero")
-        puesta = cuando != null
-        Tacto.alternar(puesta)
-        Avisos.mostrar(if (puesta) "Te avisamos cuando el ${a.code} esté por llegar" else "Ya casi llega: mejor ve saliendo")
+    Box(Modifier.padding(start = 6.dp).size(36.dp).clip(SuaveShape(12.dp)).background(if (puesta) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent).pressable {
+        if (Build.VERSION.SDK_INT >= 33 && !puesta) permiso.launch(Manifest.permission.POST_NOTIFICATIONS)
+        val ahora = Vigia.alternar(ctx, Espera(paraderoId, paradero, a.code, a.system))
+        Tacto.alternar(ahora)
+        Avisos.mostrar(if (ahora) "Te avisamos cuando al ${a.code} le falten 3 min" else "Ya no te avisamos del ${a.code}")
     }, Alignment.Center) {
-        Icon(if (puesta) Icons.Rounded.NotificationsActive else Icons.Rounded.NotificationAdd, "Avísame cuando llegue el ${a.code}",
+        Icon(if (puesta) Icons.Rounded.NotificationsActive else Icons.Rounded.NotificationAdd, if (puesta) "Quitar aviso del ${a.code}" else "Avísame cuando llegue el ${a.code}",
             tint = if (puesta) MaterialTheme.colorScheme.primary else LectorColors.Muted, modifier = Modifier.size(20.dp))
     }
 }

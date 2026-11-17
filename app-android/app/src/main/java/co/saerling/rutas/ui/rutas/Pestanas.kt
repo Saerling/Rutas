@@ -24,18 +24,30 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import co.saerling.rutas.data.*
 import co.saerling.rutas.ui.*
 import co.saerling.rutas.fx.inclinar
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 
 // ───────────────────────────────────────── Cerca ─────────────────────────────────────────
+
+/** Qué se ve en el mapa de Cerca; sobrevive al cambiar de pestaña. */
+object CapasMapa {
+    var buses by mutableStateOf(true)
+    var trafico by mutableStateOf(true)
+}
+
+/** Sistemas que se toman en estación o portal (y sus alimentadores), frente al SITP de la calle. */
+fun esTransMilenio(sistema: String?) = sistema == "troncal" || sistema == "dual" || sistema == "alimentador" || sistema == "transmicable"
 
 @Composable
 fun CercaScreen(abrir: (Capa) -> Unit) {
@@ -64,12 +76,42 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
     LaunchedEffect(Unit) { while (true) { feed = runCatching { Api.salud().feed }.getOrNull(); delay(60_000) } }
     var novedades by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { while (true) { runCatching { Api.novedades().alerts.size }.onSuccess { novedades = it }; delay(5 * 60_000) } }
+    // Todos los buses en vía alrededor (del centro del mapa si lo mueves), cada 15 s, con su velocidad.
+    val centroBuses = centroMapa?.takeIf { Ubicacion.enBogota(it.first, it.second) } ?: base
+    val claveBuses = centroBuses?.let { "%.2f,%.2f".format(java.util.Locale.US, it.first, it.second) }
+    var vivos by remember { mutableStateOf<Vehiculos?>(null) }
+    LaunchedEffect(claveBuses, CapasMapa.buses || CapasMapa.trafico) {
+        val c = centroBuses ?: return@LaunchedEffect
+        if (!CapasMapa.buses && !CapasMapa.trafico) { vivos = null; return@LaunchedEffect }
+        while (true) { runCatching { Api.vehiculos(c.first, c.second, 1800) }.onSuccess { vivos = it }; delay(15_000) }
+    }
+    var tocado by remember { mutableStateOf<String?>(null) }
+    var siguiendo by remember { mutableStateOf(false) }
+    val busesMapa = if (CapasMapa.buses && vivos?.feed?.live == true) vivos!!.buses else emptyList()
+    val bus = busesMapa.firstOrNull { it.id == tocado }
+    LaunchedEffect(bus == null) { if (bus == null) siguiendo = false }
+    // Próximas salidas de los paraderos más cercanos, juntas por ruta (como la app Transit).
+    var salidas by remember { mutableStateOf<List<Pair<Stop, Arrival>>?>(null) }
+    LaunchedEffect(cerca) {
+        val lista = cerca?.take(5) ?: return@LaunchedEffect
+        salidas = null
+        while (true) {
+            val todas = kotlinx.coroutines.coroutineScope {
+                lista.map { s -> async { runCatching { Api.paradero(s.id) }.getOrNull()?.arrivals.orEmpty().map { s to it } } }.map { it.await() }.flatten()
+            }
+            salidas = todas.filter { (it.second.minutes ?: 999) <= 60 }.groupBy { it.second.code }.values
+                .map { g -> g.minWith(compareBy({ it.second.minutes ?: 999 }, { it.first.distanceM ?: 9e9 })) }
+                .sortedWith(compareBy({ (it.first.distanceM ?: 0.0) / 80 + (it.second.minutes ?: 99) }))
+            delay(30_000)
+        }
+    }
     val gpsApagado = Ubicacion.permiso && yo == null && !Ubicacion.gpsEncendido(ctx)
     val saludo = when (LocalTime.now().hour) { in 5..11 -> "Buenos días"; in 12..18 -> "Buenas tardes"; else -> "Buenas noches" }
 
     MapaConHoja(
         asomo = 0.42f,
         finLista = 120.dp,
+        fijo = bus?.let { b -> { TarjetaBus(b, siguiendo, { siguiendo = !siguiendo; Tacto.alternar(siguiendo) }, verRuta = b.routeId?.let { r -> { abrir(Capa.Ruta(r)) } }) { tocado = null } } },
         mapa = { abajo, pedido ->
             Mapa(
                 Modifier.fillMaxSize(), centro = base ?: Ubicacion.BOGOTA, zoom = if (base != null) 15.5 else 11.5,
@@ -77,17 +119,29 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
                 encuadrar = if (zona != null) emptyList() else listOfNotNull(punto) + cerca.orEmpty().take(6).map { it.lat to it.lon },
                 alTocarPunto = { id -> abrir(Capa.Paradero(id)) },
                 alMover = { c -> centroMapa = c },
+                buses = busesMapa,
+                trafico = CapasMapa.trafico && vivos?.feed?.live == true,
+                alTocarBus = { tocado = it; Tacto.tic() },
+                resaltado = tocado,
+                seguir = if (siguiendo) bus?.let { it.lat to it.lon } else null,
                 abajo = abajo, pedido = pedido, centrarEn = punto,
             )
         },
         sobreMapa = {
             val c = centroMapa
             val lejos = c != null && Ubicacion.enBogota(c.first, c.second) && (base == null || Ubicacion.metros(c, base) > 350)
-            AnimatedVisibility(lejos, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 64.dp), enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-                Row(Modifier.clip(SuaveShape(20.dp)).background(LectorColors.Card).pressable { Tacto.alternar(true); zona = c; cerca = null; centroMapa = null }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Search, null, tint = LectorColors.Text, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Buscar en esta zona", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text)
+            Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                // Capas del mapa, como los filtros de Google Maps.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CapaChip(Icons.Rounded.DirectionsBus, "Buses en vivo", CapasMapa.buses) { CapasMapa.buses = !CapasMapa.buses }
+                    CapaChip(Icons.Rounded.Traffic, "Tráfico", CapasMapa.trafico) { CapasMapa.trafico = !CapasMapa.trafico }
+                }
+                AnimatedVisibility(lejos, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                    Row(Modifier.padding(top = 10.dp).clip(SuaveShape(20.dp)).background(LectorColors.Card).pressable { Tacto.alternar(true); zona = c; cerca = null; centroMapa = null }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Search, null, tint = LectorColors.Text, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Buscar paraderos en esta zona", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text)
+                    }
                 }
             }
         },
@@ -96,16 +150,25 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
                 Column(Modifier.padding(horizontal = Margen)) {
                     Text(saludo, style = LectorType.Hero, color = LectorColors.Text)
                     Spacer(Modifier.height(8.dp))
-                    EstadoDatos(feed)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EstadoDatos(feed)
+                        val n = vivos?.buses?.size
+                        if (n != null && vivos?.feed?.live == true && n > 0) Pildora(Icons.Rounded.DirectionsBus, "$n buses cerca")
+                    }
                 }
             }
+            if (Vigia.esperas.isNotEmpty()) item("esperas") { EsperasActivas() }
             item("tullave") { AccesoTarjeta { abrir(Capa.Tarjeta) } }
-            if (novedades > 0) item("nov") {
-                Row(Modifier.padding(horizontal = Margen).padding(top = 10.dp).fillMaxWidth().clip(SuaveShape(22.dp)).background(LectorColors.Card).pressable { abrir(Capa.Novedades) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Warning, null, tint = androidx.compose.ui.graphics.Color(0xFFF2A33D), modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text("$novedades novedad${if (novedades > 1) "es" else ""} en el servicio", style = LectorType.Section, color = LectorColors.Text, modifier = Modifier.weight(1f))
-                    Icon(Icons.Rounded.ChevronRight, null, tint = LectorColors.Muted)
+            item("vias") { ResumenVias(vivos?.traffic, novedades, { abrir(Capa.Vias) }) { abrir(Capa.Novedades) } }
+            val sal = salidas
+            if (base != null && cerca?.isNotEmpty() == true) {
+                item("sal-t") { Seccion("Salen cerca de ti") }
+                if (sal == null) item("sal-c") { CargandoFilas(3) }
+                else if (sal.isEmpty()) item("sal-v") { Text("No hay salidas en la próxima hora en los paraderos cercanos.", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(horizontal = Margen)) }
+                else {
+                    val (tm, sitp) = sal.partition { esTransMilenio(it.second.system) }
+                    if (sitp.isNotEmpty()) item("sal-sitp") { GrupoSalidas("SITP", Color(0xFF2F6FC6), sitp, abrir) }
+                    if (tm.isNotEmpty()) item("sal-tm") { GrupoSalidas("TransMilenio y alimentadores", Color(0xFFD7262C), tm, abrir) }
                 }
             }
             if (Guardados.paraderos.isNotEmpty()) {
@@ -141,15 +204,121 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
                 base == null && yo != null -> item("fuera") { Vacio("Estás fuera de Bogotá", "Mueve el mapa a Bogotá o busca en Buscar.") }
                 base == null -> item("buscando") { Seccion("Buscando dónde estás…"); CargandoFilas(3) }
                 error && cerca == null -> item("error") { Vacio("No pudimos cargar los paraderos", "Revisa tu conexión.", "Reintentar") { intento++ } }
-                cerca == null -> item("cargando") { Seccion(if (zona != null) "En esta zona" else "Cerca de ti"); CargandoFilas() }
+                cerca == null -> item("cargando") { Seccion(if (zona != null) "En esta zona" else "Paraderos cerca"); CargandoFilas() }
                 cerca!!.isEmpty() -> item("vacio") { Vacio("No hay paraderos aquí", "Prueba moviendo el mapa.") }
                 else -> {
-                    item("lista-t") { Seccion(if (zona != null) "En esta zona" else "Cerca de ti") }
+                    item("lista-t") { Seccion(if (zona != null) "Paraderos en esta zona" else "Paraderos cerca") }
                     items(cerca.orEmpty(), key = { "c" + it.id }) { s -> FilaParadero(s, { abrir(Capa.Paradero(s.id)) }, Modifier.revelar("c" + s.id)) }
                 }
             }
         },
     )
+}
+
+@Composable
+private fun CapaChip(icono: ImageVector, texto: String, activo: Boolean, onClick: () -> Unit) {
+    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    Row(
+        Modifier.clip(SuaveShape(18.dp)).background(if (activo) acento else LectorColors.Glass).pressable { Tacto.alternar(!activo); onClick() }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val c = if (activo) androidx.compose.material3.MaterialTheme.colorScheme.onPrimary else LectorColors.Text
+        Icon(icono, null, tint = c, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(texto, style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = c)
+    }
+}
+
+@Composable
+private fun Pildora(icono: ImageVector, texto: String) {
+    Row(Modifier.clip(SuaveShape(14.dp)).background(LectorColors.Card).padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icono, null, tint = LectorColors.Muted, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(texto, style = LectorType.Label, color = LectorColors.Text)
+    }
+}
+
+/** Un grupo de salidas (SITP o TransMilenio): cada ruta una vez, con el paradero donde tomarla y cuánto falta. */
+@Composable
+private fun GrupoSalidas(titulo: String, color: Color, lista: List<Pair<Stop, Arrival>>, abrir: (Capa) -> Unit) {
+    var todas by remember { mutableStateOf(false) }
+    Tarjeta(Modifier.padding(horizontal = Margen).padding(bottom = 10.dp), radio = 24.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).clip(SuaveShape(5.dp)).background(color))
+            Spacer(Modifier.width(8.dp))
+            Text(titulo, style = LectorType.Section.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text, modifier = Modifier.weight(1f))
+            Text("${lista.size} ruta${if (lista.size > 1) "s" else ""}", style = LectorType.Label, color = LectorColors.Muted)
+        }
+        Spacer(Modifier.height(6.dp))
+        val vista = if (todas) lista else lista.take(5)
+        vista.forEach { (s, a) ->
+            Row(Modifier.fillMaxWidth().clip(SuaveShape(14.dp)).pressable { Tacto.tic(); abrir(Capa.Paradero(s.id)) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.widthIn(min = 66.dp)) { Insignia(a.code, a.system) }
+                Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                    Text(a.name.ifBlank { a.code }, style = LectorType.Body.copy(fontWeight = FontWeight.Medium), color = LectorColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(listOfNotNull(s.name, s.distanceM?.let { "${(it / 80).toInt().coerceAtLeast(1)} min a pie" }).joinToString(" · "), style = LectorType.Label, color = LectorColors.Muted, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                Minutos(a)
+            }
+        }
+        if (lista.size > 5) Text(if (todas) "Ver menos" else "Ver las ${lista.size}", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 4.dp).clip(SuaveShape(10.dp)).pressable { todas = !todas }.padding(vertical = 6.dp))
+    }
+}
+
+/** Los buses que estás esperando (campana): cuánto les falta y cómo quitarlos. */
+@Composable
+fun EsperasActivas() {
+    val ctx = LocalContext.current
+    Tarjeta(Modifier.padding(horizontal = Margen).padding(top = 14.dp), radio = 22.dp, color = LectorColors.CardHigh) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.NotificationsActive, null, tint = androidx.compose.material3.MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Te avisamos cuando lleguen", style = LectorType.Section, color = LectorColors.Text)
+        }
+        Vigia.esperas.toList().forEach { e ->
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Insignia(e.codigo, e.sistema)
+                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                    Text(e.nombre, style = LectorType.Label, color = LectorColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(Vigia.faltan[e.clave]?.let { "Llega en $it min · avisamos a los ${e.antes}" } ?: "Consultando…", style = LectorType.Label, color = LectorColors.Muted)
+                }
+                Box(Modifier.size(36.dp).clip(SuaveShape(12.dp)).background(LectorColors.PillFill).pressable { Tacto.alternar(false); Vigia.quitar(ctx, e.clave); Avisos.mostrar("Ya no te avisamos del ${e.codigo}") }, Alignment.Center) {
+                    Icon(Icons.Rounded.NotificationsOff, "Ya no me avises del ${e.codigo}", tint = LectorColors.Text, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+    }
+}
+
+/** Cómo están las vías alrededor: tráfico medido con los buses y novedades del servicio. */
+@Composable
+private fun ResumenVias(t: TraficoZona?, novedades: Int, abrirVias: () -> Unit, abrirNovedades: () -> Unit) {
+    Tarjeta(Modifier.padding(horizontal = Margen).padding(top = 10.dp), radio = 22.dp, onClick = abrirVias) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val nivel = t?.level
+            Box(Modifier.size(36.dp).clip(SuaveShape(12.dp)).background(colorTrafico(nivel).copy(alpha = 0.18f)), Alignment.Center) {
+                Icon(Icons.Rounded.Traffic, null, tint = colorTrafico(nivel), modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(when (nivel) { "fluido" -> "Las vías van fluidas"; "moderado" -> "Tráfico moderado cerca"; "lento" -> "Hay trancón cerca"; else -> "Estado de las vías" }, style = LectorType.Section, color = LectorColors.Text)
+                Text(
+                    if (t?.kmh != null) "Los buses van a ${t.kmh} km/h en promedio" + (t.slow.firstOrNull { it.level == "lento" }?.near?.takeIf { it.isNotBlank() }?.let { " · lento en $it" } ?: "")
+                    else "Tráfico de toda Bogotá, medido con los buses en vivo",
+                    style = LectorType.Label, color = LectorColors.Muted, maxLines = 2,
+                )
+            }
+            Icon(Icons.Rounded.ChevronRight, null, tint = LectorColors.Muted)
+        }
+        if (novedades > 0) Row(Modifier.padding(top = 10.dp).fillMaxWidth().clip(SuaveShape(14.dp)).background(LectorColors.PillFill).pressable(abrirNovedades).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Warning, null, tint = Color(0xFFF2A33D), modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("$novedades novedad${if (novedades > 1) "es" else ""}: desvíos y cierres", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text, modifier = Modifier.weight(1f))
+            Icon(Icons.Rounded.ChevronRight, null, tint = LectorColors.Muted, modifier = Modifier.size(18.dp))
+        }
+    }
 }
 
 @Composable
@@ -211,6 +380,10 @@ object Planeador {
     var resultado by mutableStateOf<PlanResult?>(null)
     var orden by mutableIntStateOf(0)
     var cargandoMas by mutableStateOf(false)
+    /** 0 todas, 1 solo SITP, 2 con TransMilenio. */
+    var tipo by mutableIntStateOf(0)
+    /** Páginas extra pedidas solas para esta búsqueda. */
+    var paginas = 0
 }
 
 @Composable
@@ -232,13 +405,13 @@ fun IrScreen(abrir: (Capa) -> Unit) {
     }
     val hasta = Planeador.hasta
     var intento by remember { mutableIntStateOf(0) }
-    LaunchedEffect(hasta?.id, Planeador.desde?.id) { val k = "${hasta?.id}|${Planeador.desde?.id}"; if (Planeador.claveRes != k) { Planeador.resultado = null; Planeador.claveRes = k } }
+    LaunchedEffect(hasta?.id, Planeador.desde?.id) { val k = "${hasta?.id}|${Planeador.desde?.id}"; if (Planeador.claveRes != k) { Planeador.resultado = null; Planeador.claveRes = k; Planeador.paginas = 0 } }
     LaunchedEffect(origen?.let { "%.3f,%.3f".format(it.first, it.second) }, hasta?.id, Planeador.dentroDe, Planeador.llegarA, Planeador.accesible, Planeador.menosTransbordos, editando, intento) {
         if (editando != null || hasta == null || origen == null) return@LaunchedEffect
         cargando = true; error = false
         val hora = if (Planeador.dentroDe > 0) java.time.OffsetDateTime.now().plusMinutes(Planeador.dentroDe.toLong()).toString() else null
         runCatching { Api.plan(origen, hasta.lat to hasta.lon, hora, Planeador.llegarA, Planeador.accesible, Planeador.menosTransbordos) }
-            .onSuccess { r -> Planeador.resultado = nombrar(r, Planeador.desde?.name ?: "Tu ubicación", hasta.name) }.onFailure { error = true }
+            .onSuccess { r -> Planeador.paginas = 0; Planeador.resultado = nombrar(r, Planeador.desde?.name ?: "Tu ubicación", hasta.name) }.onFailure { error = true }
         cargando = false
     }
 
@@ -251,6 +424,27 @@ fun IrScreen(abrir: (Capa) -> Unit) {
             else -> { Guardados.recordar(p); Planeador.hasta = p }
         }
         editando = null; texto = ""
+    }
+
+    fun cargarMas() {
+        val r = Planeador.resultado ?: return
+        val o = origen ?: return
+        val h = hasta ?: return
+        val cursor = r.next ?: return
+        Planeador.cargandoMas = true
+        escena.launch {
+            runCatching { Api.plan(o, h.lat to h.lon, if (Planeador.dentroDe > 0) java.time.OffsetDateTime.now().plusMinutes(Planeador.dentroDe.toLong()).toString() else null, Planeador.llegarA, cursor = cursor, accesible = Planeador.accesible, menosTransbordos = Planeador.menosTransbordos) }
+                .onSuccess { mas -> val n = nombrar(mas, Planeador.desde?.name ?: "Tu ubicación", h.name)
+                    val actual = Planeador.resultado ?: r
+                    Planeador.resultado = actual.copy(itineraries = (actual.itineraries + n.itineraries).distinctBy { x -> x.id }, next = n.next) }
+                .onFailure { Avisos.mostrar("No pudimos cargar más opciones") }
+            Planeador.cargandoMas = false
+        }
+    }
+
+    // Se piden solas hasta 3 páginas más, para ver todas las rutas posibles; después, con el botón.
+    LaunchedEffect(Planeador.resultado?.next, editando) {
+        if (editando == null && Planeador.resultado?.next != null && Planeador.paginas < 3 && !Planeador.cargandoMas) { Planeador.paginas++; cargarMas() }
     }
 
     PaginaPestana("Ir", "¿A dónde vas?") {
@@ -315,10 +509,26 @@ fun IrScreen(abrir: (Capa) -> Unit) {
                 }
                 r != null && r.itineraries.isEmpty() && r.walk == null -> item("nada") { Vacio("No encontramos cómo llegar", "Prueba con otra hora o un punto más cerca de una estación.") }
                 r != null -> {
+                    val todas = ordenar(r.itineraries, Planeador.orden)
+                    // Arriba, como en Moovit y Transit: el bus más cercano para tomar de cada ruta, SITP y TransMilenio aparte.
+                    val porTomar = todas.mapNotNull { x -> x.legs.firstOrNull { l -> l.mode == "transit" }?.let { l -> l to x } }
+                        .filter { (l, _) -> minutosDesdeAhora(l.start) >= -1 }
+                        .groupBy { (l, _) -> codigoVisible(l.code, l.headsign) }.values
+                        .map { g -> g.minBy { (l, _) -> l.start } }
+                        .sortedBy { (l, _) -> l.start }
+                    val (tm, sitp) = porTomar.partition { (l, _) -> esTransMilenio(l.system) }
+                    if (sitp.isNotEmpty()) {
+                        item("cerca-sitp-t") { SeccionColor("SITP más cercanos", Color(0xFF2F6FC6)) }
+                        item("cerca-sitp") { FilaPorTomar(sitp) { abrir(Capa.Viaje(it)) } }
+                    }
+                    if (tm.isNotEmpty()) {
+                        item("cerca-tm-t") { SeccionColor("TransMilenio y alimentadores más cercanos", Color(0xFFD7262C)) }
+                        item("cerca-tm") { FilaPorTomar(tm) { abrir(Capa.Viaje(it)) } }
+                    }
                     item("orden") {
                         // Segmented Control deslizante (Motion Primitives) para ordenar, como los filtros de Moovit.
                         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides LectorColors.Text) {
-                            Box(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen).padding(top = 16.dp)) {
+                            Box(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen).padding(top = 18.dp)) {
                                 co.saerling.rutas.fx.SegmentadoDeslizante(
                                     listOf("Mejor", "Más rápido", "Menos a pie", "Menos transbordos"), Planeador.orden, { Tacto.tic(); Planeador.orden = it },
                                     color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
@@ -326,26 +536,26 @@ fun IrScreen(abrir: (Capa) -> Unit) {
                             }
                         }
                     }
-                    // Como Moovit: una tarjeta por combinación de buses, con sus siguientes salidas debajo.
-                    val grupos = ordenar(r.itineraries, Planeador.orden).groupBy { cadena(it) }.values.toList()
-                    item("res-t") { Seccion(if (cargando) "Actualizando…" else "${grupos.size} formas de llegar") }
+                    item("tipo") {
+                        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen).padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ChipSel("Todas", Planeador.tipo == 0) { Planeador.tipo = 0 }
+                            ChipSel("Solo SITP", Planeador.tipo == 1) { Planeador.tipo = 1 }
+                            ChipSel("Con TransMilenio", Planeador.tipo == 2) { Planeador.tipo = 2 }
+                        }
+                    }
+                    // Todas las formas de llegar: una tarjeta por combinación de buses, con sus siguientes salidas debajo.
+                    val grupos = todas.filter { x ->
+                        val sis = x.legs.filter { l -> l.mode == "transit" }.map { l -> l.system }
+                        when (Planeador.tipo) { 1 -> sis.isNotEmpty() && sis.none { esTransMilenio(it) }; 2 -> sis.any { esTransMilenio(it) }; else -> true }
+                    }.groupBy { cadena(it) }.values.toList()
+                    item("res-t") { Seccion(if (cargando) "Actualizando…" else if (grupos.isEmpty()) "Ninguna con ese filtro" else "Todas las rutas · ${grupos.size} forma${if (grupos.size > 1) "s" else ""} de llegar") }
                     val mejor = grupos.firstOrNull()?.first()
                     items(grupos, key = { it.first().id }) { g -> TarjetaViaje(g.first(), g.first() == mejor, Modifier.revelar("v" + g.first().id), siguientes = g.drop(1).sortedBy { x -> x.start }.take(3)) { abrir(Capa.Viaje(g.first())) } }
                     r.walk?.let { w -> item("pie") { TarjetaViaje(w, false) { abrir(Capa.Viaje(w)) } } }
                     if (r.next != null) item("mas") {
                         Box(Modifier.fillMaxWidth().padding(top = 10.dp), Alignment.Center) {
                             if (Planeador.cargandoMas) co.saerling.rutas.fx.Girador(color = androidx.compose.material3.MaterialTheme.colorScheme.primary)
-                            else BotonExpresivo("Ver más opciones", Icons.Rounded.ExpandMore, {
-                                Planeador.cargandoMas = true
-                                escena.launch {
-                                    val o = origen
-                                    runCatching { Api.plan(o, hasta.lat to hasta.lon, if (Planeador.dentroDe > 0) java.time.OffsetDateTime.now().plusMinutes(Planeador.dentroDe.toLong()).toString() else null, Planeador.llegarA, cursor = r.next, accesible = Planeador.accesible, menosTransbordos = Planeador.menosTransbordos) }
-                                        .onSuccess { mas -> val n = nombrar(mas, Planeador.desde?.name ?: "Tu ubicación", hasta.name)
-                                            Planeador.resultado = r.copy(itineraries = (r.itineraries + n.itineraries).distinctBy { x -> x.id }, next = n.next) }
-                                        .onFailure { Avisos.mostrar("No pudimos cargar más opciones") }
-                                    Planeador.cargandoMas = false
-                                }
-                            }, estilo = EstiloBoton.TONAL)
+                            else BotonExpresivo("Ver más opciones", Icons.Rounded.ExpandMore, { cargarMas() }, estilo = EstiloBoton.TONAL)
                         }
                     }
                     item("credito") { Text("Rutas planeadas con Transitous y datos abiertos de TransMilenio.", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(horizontal = Margen, vertical = 14.dp)) }
@@ -405,6 +615,53 @@ private fun Atajo(icono: ImageVector, texto: String, modifier: Modifier, onClick
     }
 }
 
+fun minutosDesdeAhora(iso: String): Long = runCatching { java.time.Duration.between(java.time.OffsetDateTime.now(), java.time.OffsetDateTime.parse(iso)).toMinutes() }.getOrDefault(0L)
+
+@Composable
+private fun SeccionColor(texto: String, color: Color) {
+    Row(Modifier.padding(horizontal = Margen).padding(top = 18.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(SuaveShape(4.dp)).background(color))
+        Spacer(Modifier.width(8.dp))
+        Text(texto.uppercase(), style = LectorType.Label.copy(letterSpacing = 1.1.sp, fontWeight = FontWeight.SemiBold), color = LectorColors.Muted)
+    }
+}
+
+/** Tarjetas en fila con el próximo bus de cada ruta: cuándo sale, desde dónde y a qué hora llegas. */
+@Composable
+private fun FilaPorTomar(lista: List<Pair<Leg, Itinerary>>, abrir: (Itinerary) -> Unit) {
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        lista.take(10).forEach { (l, x) ->
+            val faltan = minutosHasta(l.start)
+            val caminar = x.legs.takeWhile { it.mode != "transit" }.sumOf { it.minutes }
+            Tarjeta(Modifier.width(170.dp), radio = 22.dp, onClick = { abrir(x) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Insignia(codigoVisible(l.code, l.headsign), l.system, grande = true)
+                    Spacer(Modifier.weight(1f))
+                    if (l.live) PuntoVivo(7.dp)
+                }
+                Spacer(Modifier.height(10.dp))
+                Text(if (faltan <= 0) "Sale ya" else if (faltan < 60) "En $faltan min" else hora(l.start), style = LectorType.Hero.copy(fontSize = 22.sp), color = LectorColors.Text)
+                Text(l.from.name, style = LectorType.Label, color = LectorColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(listOfNotNull(if (caminar > 0) "$caminar min a pie" else null, "llegas ${hora(x.end)}").joinToString(" · "), style = LectorType.Label, color = LectorColors.Muted, maxLines = 1)
+                if (caminar > 0 && faltan in 0 until caminar) Text("Puede que no alcances", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = Color(0xFFE5484D))
+            }
+        }
+    }
+}
+
+/** La barra del viaje (como Citymapper y Google Maps): cada tramo del largo de lo que tarda, en su color. */
+@Composable
+fun BarraViaje(it: Itinerary, modifier: Modifier = Modifier) {
+    val total = it.legs.sumOf { l -> l.minutes.coerceAtLeast(1) }.coerceAtLeast(1)
+    Row(modifier.fillMaxWidth().height(6.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        it.legs.forEach { l ->
+            val pie = l.mode != "transit"
+            Box(Modifier.weight(l.minutes.coerceAtLeast(1).toFloat() / total).fillMaxHeight().clip(SuaveShape(3.dp))
+                .background(if (pie) LectorColors.PillFill else colorSistema(l.system)))
+        }
+    }
+}
+
 /** Minutos hasta una hora ISO, con un reloj que avanza solo cada 30 s. */
 @Composable
 fun minutosHasta(iso: String): Int {
@@ -423,7 +680,9 @@ fun TarjetaViaje(it: Itinerary, rapida: Boolean, modifier: Modifier = Modifier, 
             Spacer(Modifier.weight(1f))
             Text("${hora(it.start)} – ${hora(it.end)}", style = LectorType.Label, color = LectorColors.Muted)
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
+        BarraViaje(it)
+        Spacer(Modifier.height(10.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
             it.legs.forEachIndexed { i, l ->
                 if (i > 0) Icon(Icons.Rounded.ChevronRight, null, tint = LectorColors.Muted, modifier = Modifier.size(16.dp))
@@ -583,6 +842,7 @@ fun AjustesScreen(abrir: (Capa) -> Unit) {
     PaginaPestana("Ajustes") {
         item("tr") { Seccion("Transporte") }
         item("tull") { FilaAjuste(Icons.Rounded.Contactless, "Tarjeta TuLlave", "Leer saldo y movimientos con NFC") { abrir(Capa.Tarjeta) } }
+        item("vias") { FilaAjuste(Icons.Rounded.Traffic, "Estado de las vías", "Tráfico de Bogotá medido con los buses en vivo") { abrir(Capa.Vias) } }
         item("nov") { FilaAjuste(Icons.Rounded.Campaign, "Novedades del sistema", "Desvíos, cierres y cambios de TransMilenio") { abrir(Capa.Novedades) } }
         item("p") { Seccion("Apariencia") }
         item("pers") { FilaAjuste(Icons.Rounded.Palette, "Personalización", "Tema, acento, cristal, esquinas, animaciones y más") { abrir(Capa.Personalizacion) } }
