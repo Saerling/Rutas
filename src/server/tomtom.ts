@@ -17,7 +17,7 @@ export async function mosaico(z: number, x: number, y: number, oscuro: boolean):
   const estilo = oscuro ? "relative0-dark" : "relative0";
   const r = await fetch(`https://api.tomtom.com/traffic/map/4/tile/flow/${estilo}/${z}/${x}/${y}.png?key=${KEY()}&tileSize=256`, { signal: AbortSignal.timeout(8000) });
   if (!r.ok) return new Response(null, { status: r.status === 429 ? 429 : 502 });
-  return new Response(await r.arrayBuffer(), { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=600, s-maxage=600, stale-while-revalidate=1800" } });
+  return new Response(await r.arrayBuffer(), { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=600", "Vercel-CDN-Cache-Control": "max-age=600, stale-while-revalidate=1800" } });
 }
 
 export interface Incidente {
