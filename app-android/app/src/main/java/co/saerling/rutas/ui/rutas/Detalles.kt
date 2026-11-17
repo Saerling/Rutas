@@ -5,6 +5,20 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -368,6 +382,7 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
     }
     // El bus que vas a tomar (o en el que vas), en vivo: los de esa ruta cerca de donde lo tomas o de donde estás.
     val tramoBus = (guia as? Guia.EnBus)?.let { g -> it.legs.getOrNull(g.tramo) }
+        ?: (guia as? Guia.EnParada)?.let { g -> it.legs.getOrNull(g.tramo) }
         ?: (guia as? Guia.Caminando)?.let { g -> it.legs.drop(g.tramo).firstOrNull { l -> l.mode == "transit" } }
         ?: it.legs.firstOrNull { l -> l.mode == "transit" }
     var busesViaje by remember { mutableStateOf<List<Bus>>(emptyList()) }
@@ -433,8 +448,8 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
                 }
                 item("pasos") { Seccion("Paso a paso") }
                 items(it.legs.size, key = { i -> "paso$i" }) { i ->
-                    val actual = guia.let { g -> (g is Guia.EnBus && g.tramo == i) || (g is Guia.Caminando && g.tramo == i) }
-                    PasoViaje(it.legs[i], actual, Modifier.revelar("paso" + it.id + i, i * 40))
+                    val actual = guiando && guia.tramoActual == i
+                    PasoViaje(it.legs[i], if (actual) guia else null, hecho = guiando && ((guia.tramoActual ?: -1) > i || guia is Guia.Llegaste), Modifier.revelar("paso" + it.id + i, i * 40))
                 }
                 item("fin") {
                     Row(Modifier.padding(horizontal = Margen, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -454,43 +469,88 @@ private fun TarjetaGuia(it: Itinerary, guia: Guia, terminar: () -> Unit) {
     val (titulo, detalle) = GuiaViaje.texto(it, guia)
     val urgente = guia is Guia.EnBus && guia.bajarYa
     val acento = MaterialTheme.colorScheme.primary
-    Row(
+    val tinta = if (urgente) MaterialTheme.colorScheme.onPrimary else LectorColors.Text
+    val suave = if (urgente) tinta.copy(alpha = 0.85f) else LectorColors.Muted
+    val fondo by animateColorAsState(if (urgente) acento else LectorColors.Card, label = "guia")
+    Column(
         Modifier.padding(horizontal = 14.dp).padding(bottom = 10.dp).fillMaxWidth().clip(SuaveShape(24.dp))
-            .background(if (urgente) acento else LectorColors.Card).padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .background(fondo).padding(16.dp).animateContentSize(),
     ) {
-        PuntoVivo()
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(titulo, style = LectorType.Hero, color = if (urgente) MaterialTheme.colorScheme.onPrimary else LectorColors.Text)
-            Text(detalle, style = LectorType.Body, color = if (urgente) MaterialTheme.colorScheme.onPrimary else LectorColors.Muted, maxLines = 2)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconoGuia(it, guia, tinta)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                AnimatedContent(titulo, transitionSpec = { (fadeIn() + slideInVertically { h -> h / 3 }) togetherWith fadeOut() }, label = "titulo") { t ->
+                    Text(t, style = LectorType.Hero, color = tinta, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                Text(detalle, style = LectorType.Body, color = suave, maxLines = 2)
+            }
+            Box(Modifier.size(42.dp).clip(SuaveShape(14.dp)).background(LectorColors.PillFill).pressable(terminar), Alignment.Center) {
+                Icon(Icons.Rounded.Close, "Terminar viaje", tint = tinta)
+            }
         }
-        Box(Modifier.size(42.dp).clip(SuaveShape(14.dp)).background(LectorColors.PillFill).pressable(terminar), Alignment.Center) {
-            Icon(Icons.Rounded.Close, "Terminar viaje", tint = if (urgente) MaterialTheme.colorScheme.onPrimary else LectorColors.Text)
+        // Por dónde vas: la cuenta de paradas (o del trecho a pie) se llena a medida que avanzas.
+        val paradasTramo = guia.tramoActual?.let { t -> it.legs.getOrNull(t) }?.takeIf { l -> l.mode == "transit" }?.paradas()?.lastIndex ?: 0
+        val (hecho, total, rotulo) = when (guia) {
+            is Guia.EnBus -> Triple(guia.ultima, guia.total, "Parada ${guia.ultima} de ${guia.total}")
+            is Guia.EnParada -> Triple(0, paradasTramo, "Esperando el bus · $paradasTramo paradas")
+            is Guia.Caminando -> Triple((guia.progreso * 100).toInt(), 100, "A pie · ${(guia.progreso * 100).toInt()} %")
+            else -> Triple(0, 0, "")
+        }
+        if (total > 0) {
+            val fraccion by animateFloatAsState(hecho.toFloat() / total, tween(500), label = "avance")
+            val color = guia.tramoActual?.let { t -> it.legs.getOrNull(t) }?.takeIf { l -> l.mode == "transit" }?.let { l -> colorSistema(l.system) } ?: acento
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(SuaveShape(3.dp)).background(tinta.copy(alpha = 0.12f))) {
+                Box(Modifier.fillMaxWidth(fraccion).fillMaxHeight().clip(SuaveShape(3.dp)).background(if (urgente) tinta else color))
+            }
+            Row(Modifier.padding(top = 6.dp)) {
+                Text(rotulo, style = LectorType.Label, color = suave, modifier = Modifier.weight(1f))
+                Text("Paso ${(guia.tramoActual ?: 0) + 1} de ${it.legs.size}", style = LectorType.Label, color = suave)
+            }
         }
     }
 }
 
-private val GIROS = mapOf(
-    "CONTINUE" to "Sigue derecho", "LEFT" to "Gira a la izquierda", "RIGHT" to "Gira a la derecha",
-    "SLIGHTLY_LEFT" to "Ve un poco a la izquierda", "SLIGHTLY_RIGHT" to "Ve un poco a la derecha",
-    "HARD_LEFT" to "Gira cerrado a la izquierda", "HARD_RIGHT" to "Gira cerrado a la derecha",
-    "UTURN_LEFT" to "Da la vuelta", "UTURN_RIGHT" to "Da la vuelta", "CIRCLE_CLOCKWISE" to "Toma la glorieta",
-    "CIRCLE_COUNTERCLOCKWISE" to "Toma la glorieta", "ELEVATOR" to "Toma el ascensor", "STAIRS" to "Toma las escaleras",
-)
+/** Flecha del próximo giro a pie, el bus cuando vas o lo esperas, o el punto en vivo mientras busca tu ubicación. */
+@Composable
+private fun IconoGuia(it: Itinerary, guia: Guia, tinta: Color) {
+    Box(Modifier.size(44.dp).clip(SuaveShape(14.dp)).background(tinta.copy(alpha = 0.10f)), Alignment.Center) {
+        when (guia) {
+            is Guia.Caminando -> {
+                val giro = it.legs[guia.tramo].pasosLimpios().getOrNull(guia.paso)?.turn
+                if (giro == null) Icon(Icons.AutoMirrored.Rounded.DirectionsWalk, null, tint = tinta)
+                else Icon(Icons.Rounded.ArrowUpward, null, tint = tinta, modifier = Modifier.rotate(anguloGiro(giro)))
+            }
+            is Guia.EnBus, is Guia.EnParada -> Icon(Icons.Rounded.DirectionsBus, null, tint = tinta)
+            Guia.Llegaste -> Icon(Icons.Rounded.Flag, null, tint = tinta)
+            else -> PuntoVivo()
+        }
+    }
+}
+
+private fun anguloGiro(t: String) = when (t) {
+    "LEFT" -> -90f; "RIGHT" -> 90f; "SLIGHTLY_LEFT" -> -45f; "SLIGHTLY_RIGHT" -> 45f
+    "HARD_LEFT" -> -135f; "HARD_RIGHT" -> 135f; "UTURN_LEFT", "UTURN_RIGHT" -> 180f
+    "CIRCLE_CLOCKWISE" -> 60f; "CIRCLE_COUNTERCLOCKWISE" -> -60f
+    else -> 0f
+}
 
 @Composable
-private fun PasoViaje(l: Leg, actual: Boolean, modifier: Modifier) {
+private fun PasoViaje(l: Leg, guia: Guia?, hecho: Boolean, modifier: Modifier) {
+    val actual = guia != null
     val color = if (l.mode == "transit") colorSistema(l.system) else LectorColors.Muted
     var abierto by remember { mutableStateOf(false) }
-    Row(modifier.fillMaxWidth().padding(horizontal = Margen, vertical = 8.dp).height(IntrinsicSize.Min)) {
+    Row(modifier.fillMaxWidth().padding(horizontal = Margen, vertical = 8.dp).height(IntrinsicSize.Min).alpha(if (hecho) 0.45f else 1f)) {
         Column(Modifier.width(64.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-            if (l.mode == "transit") Insignia(codigoVisible(l.code, l.headsign), l.system) else Icon(Icons.AutoMirrored.Rounded.DirectionsWalk, null, tint = LectorColors.Muted)
+            if (hecho) Icon(Icons.Rounded.CheckCircle, "Hecho", tint = color, modifier = Modifier.size(22.dp))
+            else if (l.mode == "transit") Insignia(codigoVisible(l.code, l.headsign), l.system) else Icon(Icons.AutoMirrored.Rounded.DirectionsWalk, null, tint = LectorColors.Muted)
             Spacer(Modifier.height(6.dp))
             Box(Modifier.width(if (l.mode == "transit") 4.dp else 3.dp).weight(1f).clip(SuaveShape(2.dp)).background(color.copy(alpha = if (l.mode == "transit") 1f else 0.35f)))
         }
         Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f).clip(SuaveShape(18.dp)).background(if (actual) LectorColors.CardHigh else Color.Transparent).padding(if (actual) 10.dp else 0.dp)) {
+        Column(Modifier.weight(1f).clip(SuaveShape(18.dp)).background(if (actual) LectorColors.CardHigh else Color.Transparent).padding(if (actual) 10.dp else 0.dp).animateContentSize()) {
+            if (actual) Text("AHORA", style = LectorType.Label.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 2.dp))
             if (l.mode == "transit") {
                 val destino = destinoVisible(l)
                 Text("Toma el ${codigoVisible(l.code, l.headsign)}${destino?.let { " hacia $it" } ?: ""}", style = LectorType.Section, color = LectorColors.Text)
@@ -498,21 +558,82 @@ private fun PasoViaje(l: Leg, actual: Boolean, modifier: Modifier) {
                     if (l.live) { PuntoVivo(7.dp); Spacer(Modifier.width(6.dp)) }
                     Text("En ${l.from.name} · ${hora(l.start)} · ${if (l.live) "en vivo" else "según horario"}", style = LectorType.Label, color = LectorColors.Muted)
                 }
-                Row(Modifier.padding(top = 6.dp).clip(SuaveShape(10.dp)).pressable { abierto = !abierto }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("${l.stops.size + 1} paradas · ${duracion(l.minutes)}", style = LectorType.Label, color = LectorColors.Text)
-                    Icon(if (abierto) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, if (abierto) "Ocultar paradas" else "Ver paradas", tint = LectorColors.Muted, modifier = Modifier.size(18.dp))
+                if (guia is Guia.EnBus || guia is Guia.EnParada) {
+                    // Mientras vas en este bus: parada a parada, con lo recorrido, dónde estás y lo que falta.
+                    LineaParadas(l, guia, color)
+                } else {
+                    Row(Modifier.padding(top = 6.dp).clip(SuaveShape(10.dp)).pressable { abierto = !abierto }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${l.stops.size + 1} paradas · ${duracion(l.minutes)}", style = LectorType.Label, color = LectorColors.Text)
+                        Icon(if (abierto) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, if (abierto) "Ocultar paradas" else "Ver paradas", tint = LectorColors.Muted, modifier = Modifier.size(18.dp))
+                    }
+                    AnimatedVisibility(abierto) {
+                        Column(Modifier.padding(top = 4.dp)) { l.stops.forEach { p -> Text("· ${p.name}", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(vertical = 2.dp)) } }
+                    }
+                    Text("Bájate en ${l.to.name}", style = LectorType.Section.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text, modifier = Modifier.padding(top = 6.dp))
                 }
-                AnimatedVisibility(abierto) {
-                    Column(Modifier.padding(top = 4.dp)) { l.stops.forEach { p -> Text("· ${p.name}", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(vertical = 2.dp)) } }
-                }
-                Text("Bájate en ${l.to.name}", style = LectorType.Section.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text, modifier = Modifier.padding(top = 6.dp))
             } else {
                 Text("Camina hasta ${l.to.name}", style = LectorType.Section, color = LectorColors.Text)
                 Text("${duracion(l.minutes)} · ${(l.metres ?: 0.0).toInt()} m", style = LectorType.Label, color = LectorColors.Muted)
-                l.pasosLimpios().take(5).forEach { s ->
-                    val giro = GIROS[s.turn] ?: "Sigue derecho"
-                    Text(if (s.street.isNotBlank()) "$giro por ${s.street} · ${s.metres} m" else "$giro · ${s.metres} m", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 2.dp))
+                val pasos = l.pasosLimpios()
+                val ahora = (guia as? Guia.Caminando)?.paso ?: -2
+                (if (actual) pasos else pasos.take(5)).forEachIndexed { j, s ->
+                    val giro = GIROS_GUIA[s.turn] ?: "Sigue derecho"
+                    val estePaso = j == ahora
+                    val pasado = actual && ((ahora >= 0 && j < ahora - 1) || (ahora == -1 && j < pasos.lastIndex))
+                    Row(Modifier.padding(top = 3.dp).alpha(if (pasado) 0.45f else 1f), verticalAlignment = Alignment.CenterVertically) {
+                        if (actual) {
+                            Icon(Icons.Rounded.ArrowUpward, null, tint = if (estePaso) MaterialTheme.colorScheme.primary else LectorColors.Muted, modifier = Modifier.size(14.dp).rotate(anguloGiro(s.turn)))
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(if (s.street.isNotBlank()) "$giro por ${s.street} · ${s.metres} m" else "$giro · ${s.metres} m",
+                            style = LectorType.Label.copy(fontWeight = if (estePaso) FontWeight.SemiBold else FontWeight.Normal), color = if (estePaso) LectorColors.Text else LectorColors.Muted)
+                    }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Las paradas del bus en el que vas, como en Moovit: las que ya pasaste en gris (resumidas si son muchas), dónde estás
+ * con el punto en vivo y las que faltan hasta la de bajarte.
+ */
+@Composable
+private fun LineaParadas(l: Leg, guia: Guia, color: Color) {
+    val ps = l.paradas()
+    val ultima = (guia as? Guia.EnBus)?.ultima ?: 0
+    val enParada = (guia as? Guia.EnBus)?.enParada ?: true
+    val desde = (ultima - 1).coerceAtLeast(0)
+    Column(Modifier.padding(top = 8.dp)) {
+        if (desde > 0) Text("✓ $desde parada${if (desde > 1) "s" else ""} recorrida${if (desde > 1) "s" else ""}", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(start = 26.dp, bottom = 2.dp))
+        for (k in desde..ps.lastIndex) {
+            val pasada = k < ultima || (k == ultima && !enParada)
+            val aqui = k == ultima && enParada
+            val siguiente = !enParada && k == ultima + 1
+            val destino = k == ps.lastIndex
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.width(20.dp).fillMaxHeight(), Alignment.Center) {
+                    // El hilo de la línea: lleno lo recorrido, tenue lo que falta.
+                    Box(Modifier.width(3.dp).fillMaxHeight().background(color.copy(alpha = if (pasada) 1f else 0.3f)))
+                    if (aqui || siguiente) PuntoVivo(10.dp)
+                    else Box(Modifier.size(if (destino) 12.dp else 9.dp).clip(CircleShape).background(if (pasada) color else LectorColors.Card).border(2.dp, color, CircleShape))
+                }
+                Spacer(Modifier.width(6.dp))
+                Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                    Text(ps[k].name, style = LectorType.Label.copy(fontWeight = if (aqui || siguiente || destino) FontWeight.SemiBold else FontWeight.Normal),
+                        color = if (pasada) LectorColors.Muted else LectorColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val nota = when {
+                        aqui && destino -> "Bájate aquí"
+                        aqui && k == 0 -> "Esperas el bus aquí"
+                        aqui -> "Estás aquí"
+                        siguiente && destino -> "Próxima · bájate"
+                        siguiente -> "Próxima"
+                        destino -> "Te bajas aquí"
+                        else -> null
+                    }
+                    if (nota != null) Text(nota, style = LectorType.Label, color = MaterialTheme.colorScheme.primary)
+                }
+                ps[k].at?.let { a -> if (!pasada) Text(hora(a), style = LectorType.Label, color = LectorColors.Muted) }
             }
         }
     }
