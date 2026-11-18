@@ -23,6 +23,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import co.saerling.rutas.data.Bus
 import co.saerling.rutas.ui.TemaActual
+import co.saerling.rutas.ui.LectorColors
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -120,7 +121,9 @@ fun Mapa(
     val bajoPx = with(LocalDensity.current) { abajo.toPx().toInt() }
     val vista = remember {
         // TextureView: respeta las esquinas redondeadas y las animaciones de Mochy (un SurfaceView las ignora).
-        MapView(ctx, org.maplibre.android.maps.MapLibreMapOptions.createFromAttributes(ctx).textureMode(true)).apply {
+        MapView(ctx, org.maplibre.android.maps.MapLibreMapOptions.createFromAttributes(ctx).textureMode(true)
+            // Mientras carga, el fondo del tema (antes salía un gris claro que destellaba en modo oscuro).
+            .foregroundLoadColor(LectorColors.Bg.toArgb())).apply {
             onCreate(null)
             getMapAsync { m ->
                 m.uiSettings.apply { isCompassEnabled = false; isRotateGesturesEnabled = false; isTiltGesturesEnabled = false; isAttributionEnabled = false; isLogoEnabled = false }

@@ -15,6 +15,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
@@ -402,6 +407,7 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
         MapaConHoja(
             onBack = onBack,
             asomo = 0.55f,
+            resumen = "${duracion(it.minutes)} · ${hora(it.start)} – ${hora(it.end)}",
             mapa = { abajo, pedido ->
                 val yo = Ubicacion.actual
                 Mapa(
@@ -468,29 +474,42 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
 private fun TarjetaGuia(it: Itinerary, guia: Guia, terminar: () -> Unit) {
     val (titulo, detalle) = GuiaViaje.texto(it, guia)
     val urgente = guia is Guia.EnBus && guia.bajarYa
-    val acento = MaterialTheme.colorScheme.primary
-    val tinta = if (urgente) MaterialTheme.colorScheme.onPrimary else LectorColors.Text
-    val suave = if (urgente) tinta.copy(alpha = 0.85f) else LectorColors.Muted
-    val fondo by animateColorAsState(if (urgente) acento else LectorColors.Card, label = "guia")
+    val tramo = guia.tramoActual?.let { t -> it.legs.getOrNull(t) }?.takeIf { l -> l.mode == "transit" }
+    // Cuando toca bajarse, la tarjeta se pinta del color de la ruta (rojo troncal, azul zonal…) con letra blanca.
+    // Antes usaba el «primary» del tema, que en oscuro es casi blanco: por eso la tarjeta se volvía blanca de golpe.
+    val acento = tramo?.let { l -> colorSistema(l.system) } ?: Color(0xFFE53935)
+    val tinta = if (urgente) Color.White else LectorColors.Text
+    val suave = if (urgente) Color.White.copy(alpha = 0.85f) else LectorColors.Muted
+    val fondo by animateColorAsState(if (urgente) acento else LectorColors.Glass, tween(350), label = "guia")
+    // Se puede encoger a una sola línea para ver más mapa (tocándola o con la flecha).
+    var compacta by rememberSaveable { mutableStateOf(false) }
+    val pulso = rememberInfiniteTransition(label = "pulso")
+    val brillo by pulso.animateFloat(0f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "brillo")
     Column(
-        Modifier.padding(horizontal = 14.dp).padding(bottom = 10.dp).fillMaxWidth().clip(SuaveShape(24.dp))
-            .background(fondo).padding(16.dp).animateContentSize(),
+        Modifier.padding(horizontal = 14.dp).padding(bottom = 10.dp).fillMaxWidth()
+            .then(if (urgente && !Mov.reducido) Modifier.border(2.dp, Color.White.copy(alpha = 0.25f + 0.45f * brillo), SuaveShape(24.dp)) else Modifier.border(1.dp, LectorColors.GlassBorder, SuaveShape(24.dp)))
+            .clip(SuaveShape(24.dp)).background(fondo)
+            .pressable { Tacto.tic(); compacta = !compacta }
+            .padding(horizontal = 16.dp, vertical = if (compacta) 10.dp else 16.dp).animateContentSize(),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconoGuia(it, guia, tinta)
-            Spacer(Modifier.width(12.dp))
+            if (!compacta) { IconoGuia(it, guia, tinta); Spacer(Modifier.width(12.dp)) }
             Column(Modifier.weight(1f)) {
                 AnimatedContent(titulo, transitionSpec = { (fadeIn() + slideInVertically { h -> h / 3 }) togetherWith fadeOut() }, label = "titulo") { t ->
-                    Text(t, style = LectorType.Hero, color = tinta, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(t, style = if (compacta) LectorType.Section else LectorType.Hero, color = tinta, maxLines = if (compacta) 1 else 2, overflow = TextOverflow.Ellipsis)
                 }
-                Text(detalle, style = LectorType.Body, color = suave, maxLines = 2)
+                if (!compacta) Text(detalle, style = LectorType.Body, color = suave, maxLines = 2)
             }
-            Box(Modifier.size(42.dp).clip(SuaveShape(14.dp)).background(LectorColors.PillFill).pressable(terminar), Alignment.Center) {
+            Box(Modifier.size(36.dp).clip(SuaveShape(12.dp)).pressable { Tacto.tic(); compacta = !compacta }, Alignment.Center) {
+                Icon(if (compacta) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp, if (compacta) "Ver la guía completa" else "Encoger la guía", tint = tinta)
+            }
+            Spacer(Modifier.width(6.dp))
+            Box(Modifier.size(if (compacta) 36.dp else 42.dp).clip(SuaveShape(14.dp)).background(tinta.copy(alpha = 0.12f)).pressable(terminar), Alignment.Center) {
                 Icon(Icons.Rounded.Close, "Terminar viaje", tint = tinta)
             }
         }
         // Por dónde vas: la cuenta de paradas (o del trecho a pie) se llena a medida que avanzas.
-        val paradasTramo = guia.tramoActual?.let { t -> it.legs.getOrNull(t) }?.takeIf { l -> l.mode == "transit" }?.paradas()?.lastIndex ?: 0
+        val paradasTramo = tramo?.paradas()?.lastIndex ?: 0
         val (hecho, total, rotulo) = when (guia) {
             is Guia.EnBus -> Triple(guia.ultima, guia.total, "Parada ${guia.ultima} de ${guia.total}")
             is Guia.EnParada -> Triple(0, paradasTramo, "Esperando el bus · $paradasTramo paradas")
@@ -499,12 +518,11 @@ private fun TarjetaGuia(it: Itinerary, guia: Guia, terminar: () -> Unit) {
         }
         if (total > 0) {
             val fraccion by animateFloatAsState(hecho.toFloat() / total, tween(500), label = "avance")
-            val color = guia.tramoActual?.let { t -> it.legs.getOrNull(t) }?.takeIf { l -> l.mode == "transit" }?.let { l -> colorSistema(l.system) } ?: acento
-            Spacer(Modifier.height(12.dp))
-            Box(Modifier.fillMaxWidth().height(6.dp).clip(SuaveShape(3.dp)).background(tinta.copy(alpha = 0.12f))) {
-                Box(Modifier.fillMaxWidth(fraccion).fillMaxHeight().clip(SuaveShape(3.dp)).background(if (urgente) tinta else color))
+            Spacer(Modifier.height(if (compacta) 8.dp else 12.dp))
+            Box(Modifier.fillMaxWidth().height(if (compacta) 4.dp else 6.dp).clip(SuaveShape(3.dp)).background(tinta.copy(alpha = 0.14f))) {
+                Box(Modifier.fillMaxWidth(fraccion).fillMaxHeight().clip(SuaveShape(3.dp)).background(if (urgente) Color.White else acento))
             }
-            Row(Modifier.padding(top = 6.dp)) {
+            if (!compacta) Row(Modifier.padding(top = 6.dp)) {
                 Text(rotulo, style = LectorType.Label, color = suave, modifier = Modifier.weight(1f))
                 Text("Paso ${(guia.tramoActual ?: 0) + 1} de ${it.legs.size}", style = LectorType.Label, color = suave)
             }
