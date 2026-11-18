@@ -45,6 +45,8 @@ fun MapaConHoja(
     finLista: Dp = 48.dp,
     /** Lo que se ve en la barrita de abajo cuando escondes la hoja para ver el mapa entero. */
     resumen: String? = null,
+    /** Espacio libre abajo para la barrita (la barra de pestañas tapa el borde en Cerca). */
+    margenAbajo: Dp = 0.dp,
 ) {
     val alto = LocalConfiguration.current.screenHeightDp.dp
     val asomoDp = alto * asomo
@@ -76,7 +78,7 @@ fun MapaConHoja(
         },
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            val techoBoton = with(densidad) { (maxHeight - 150.dp).toPx() }
+            val techoBoton = with(densidad) { (maxHeight - 150.dp - margenAbajo).toPx() }
             mapa(if (escondida) 96.dp else asomoDp, pedido)
             sobreMapa?.invoke(this)
             // Botón «mi ubicación»: sigue el borde de la hoja mientras la arrastras.
@@ -105,7 +107,7 @@ fun MapaConHoja(
                 enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut(),
             ) {
                 Row(
-                    Modifier.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth()
+                    Modifier.navigationBarsPadding().padding(bottom = margenAbajo).padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth()
                         .clip(SuaveShape(22.dp)).background(LectorColors.Glass).border(1.dp, LectorColors.GlassBorder, SuaveShape(22.dp))
                         .pointerInput(Unit) { detectVerticalDragGestures { _, d -> if (d < -8f) alcance.launch { hoja.partialExpand() } } }
                         .pressable { Tacto.tic(); alcance.launch { hoja.partialExpand() } }

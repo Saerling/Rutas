@@ -176,8 +176,8 @@ fun Mapa(
             s.addSource(GeoJsonSource("incidentes"))
             // Flujo de TomTom debajo de todo lo nuestro (encima de las calles del mapa base).
             s.addSource(org.maplibre.android.style.sources.RasterSource("flujo",
-                org.maplibre.android.style.sources.TileSet("2.2.0", co.saerling.rutas.data.Api.mosaicosTrafico(TemaActual.oscuro)).apply { minZoom = 10f; maxZoom = 16f }, 256))
-            s.addLayer(org.maplibre.android.style.layers.RasterLayer("flujo", "flujo").withProperties(rasterOpacity(0.85f), visibility(if (flujoActual.value) "visible" else "none")))
+                org.maplibre.android.style.sources.TileSet("2.2.0", co.saerling.rutas.data.Api.mosaicosTrafico(TemaActual.oscuro)).apply { minZoom = 10f; maxZoom = 18f }, 256))
+            s.addLayer(org.maplibre.android.style.layers.RasterLayer("flujo", "flujo").withProperties(rasterOpacity(0.7f), visibility(if (flujoActual.value) "visible" else "none")))
             s.addLayer(LineLayer("incidentes-linea", "incidentes").withProperties(
                 lineColor(Expression.get("color")), lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(11, 2.5f), Expression.stop(16, 7f))),
                 lineOpacity(0.9f), lineCap("round"), lineJoin("round"),

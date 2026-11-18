@@ -12,6 +12,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -32,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -99,7 +101,7 @@ fun Tarjeta(
 ) {
     val forma = SuaveShape(radio)
     Column(
-        modifier.fillMaxWidth().clip(forma).background(color)
+        modifier.fillMaxWidth().clip(forma).background(color).border(1.dp, LectorColors.GlassBorder, forma)
             .then(if (onClick != null) Modifier.pressable { Tacto.tic(); onClick() } else Modifier)
             .padding(16.dp),
         content = contenido,
@@ -225,3 +227,16 @@ fun Modifier.revelar(clave: String, retraso: Int = 0): Modifier = this.revealOnA
 
 /** Filas ya reveladas en esta sesión: al volver con scroll no se animan otra vez. */
 private val Vistos = co.saerling.rutas.ui.mochy.RevealSeenState()
+
+
+/**
+ * Relleno de lo que está activo (capa encendida, bus que sigues, próxima salida, viaje en curso).
+ * Si el acento es casi blanco (el tema oscuro monocromo de Mochy), usa un gris iluminado con letra blanca:
+ * nunca un bloque blanco que encandila encima del mapa oscuro.
+ */
+@Composable
+fun rellenoActivo(): Pair<Color, Color> {
+    val p = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    return if (TemaActual.oscuro && p.luminance() > 0.55f) Color(0xFF3A3A3F) to Color.White
+    else p to androidx.compose.material3.MaterialTheme.colorScheme.onPrimary
+}

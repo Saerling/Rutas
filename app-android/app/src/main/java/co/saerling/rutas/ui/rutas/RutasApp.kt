@@ -5,6 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -168,18 +169,20 @@ object Atajo {
 @Composable
 private fun BarraViajeEnCurso(v: co.saerling.rutas.data.Itinerary, abrir: () -> Unit) {
     val (titulo, detalle) = co.saerling.rutas.data.GuiaViaje.texto(v, co.saerling.rutas.data.GuiaViaje.guia)
-    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    val (_, sobreRelleno) = rellenoActivo()
+    val forma = SuaveShape(22.dp)
     Row(
-        Modifier.padding(horizontal = 24.dp).widthIn(max = 520.dp).fillMaxWidth().clip(SuaveShape(22.dp)).background(acento)
+        Modifier.padding(horizontal = 24.dp).widthIn(max = 520.dp).fillMaxWidth().clip(forma).background(LectorColors.Glass)
+            .border(1.dp, LectorColors.GlassBorder, forma)
             .pressable { Tacto.tic(); abrir() }.padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PuntoVivo()
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            androidx.compose.material3.Text(titulo, style = LectorType.Section.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            androidx.compose.material3.Text(detalle, style = LectorType.Label, color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            androidx.compose.material3.Text(titulo, style = LectorType.Section.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = LectorColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            androidx.compose.material3.Text(detalle, style = LectorType.Label, color = LectorColors.Muted, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
-        androidx.compose.material3.Icon(Icons.Rounded.ChevronRight, "Ver mi viaje", tint = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary)
+        androidx.compose.material3.Icon(Icons.Rounded.ChevronRight, "Ver mi viaje", tint = LectorColors.Muted)
     }
 }

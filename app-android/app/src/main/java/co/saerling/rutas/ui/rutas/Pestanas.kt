@@ -8,6 +8,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -134,6 +135,9 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
     MapaConHoja(
         asomo = 0.42f,
         finLista = 120.dp,
+        // La barrita de la hoja escondida va encima de la barra de pestañas (y de la del viaje en curso, si hay).
+        margenAbajo = if (co.saerling.rutas.data.GuiaViaje.viaje != null) 158.dp else 82.dp,
+        resumen = "Paraderos y buses cerca",
         fijo = bus?.let { b -> { TarjetaBus(b, siguiendo, { siguiendo = !siguiendo; Tacto.alternar(siguiendo) }, verRuta = b.routeId?.let { r -> { abrir(Capa.Ruta(r)) } }) { tocado = null } } },
         mapa = { abajo, pedido ->
             Mapa(
@@ -162,7 +166,7 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
                     CapaChip(Icons.Rounded.Traffic, "Tráfico", CapasMapa.trafico) { CapasMapa.trafico = !CapasMapa.trafico }
                 }
                 AnimatedVisibility(lejos, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-                    Row(Modifier.padding(top = 10.dp).clip(SuaveShape(20.dp)).background(LectorColors.Card).pressable { Tacto.alternar(true); zona = c; cerca = null; centroMapa = null }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(top = 10.dp).clip(SuaveShape(20.dp)).background(LectorColors.Glass).border(1.dp, LectorColors.GlassBorder, SuaveShape(20.dp)).pressable { Tacto.alternar(true); zona = c; cerca = null; centroMapa = null }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Search, null, tint = LectorColors.Text, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Buscar paraderos en esta zona", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Text)
@@ -259,13 +263,15 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
 
 @Composable
 private fun CapaChip(icono: ImageVector, texto: String, activo: Boolean, onClick: () -> Unit) {
-    val acento = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    val (relleno, sobre) = rellenoActivo()
+    val fondo by androidx.compose.animation.animateColorAsState(if (activo) relleno else LectorColors.Glass, label = "capa")
     Row(
-        Modifier.clip(SuaveShape(18.dp)).background(if (activo) acento else LectorColors.Glass).pressable { Tacto.alternar(!activo); onClick() }
+        Modifier.clip(SuaveShape(18.dp)).background(fondo).border(1.dp, if (activo) sobre.copy(alpha = 0.22f) else LectorColors.GlassBorder, SuaveShape(18.dp))
+            .pressable { Tacto.alternar(!activo); onClick() }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val c = if (activo) androidx.compose.material3.MaterialTheme.colorScheme.onPrimary else LectorColors.Text
+        val c = if (activo) sobre else LectorColors.Muted
         Icon(icono, null, tint = c, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
         Text(texto, style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = c)

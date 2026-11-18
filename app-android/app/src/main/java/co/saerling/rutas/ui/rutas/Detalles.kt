@@ -311,8 +311,8 @@ private fun Salidas(horas: List<String>) {
                 val pasada = proxima >= 0 && i < proxima || proxima < 0
                 Text(
                     h, style = LectorType.Label.copy(fontWeight = if (i == proxima) FontWeight.Bold else FontWeight.Normal),
-                    color = if (i == proxima) MaterialTheme.colorScheme.onPrimary else if (pasada) LectorColors.Muted else LectorColors.Text,
-                    modifier = Modifier.clip(SuaveShape(10.dp)).background(if (i == proxima) MaterialTheme.colorScheme.primary else LectorColors.Card).padding(horizontal = 10.dp, vertical = 6.dp),
+                    color = if (i == proxima) rellenoActivo().second else if (pasada) LectorColors.Muted else LectorColors.Text,
+                    modifier = Modifier.clip(SuaveShape(10.dp)).background(if (i == proxima) rellenoActivo().first else LectorColors.Card).padding(horizontal = 10.dp, vertical = 6.dp),
                 )
             }
         }
@@ -329,7 +329,7 @@ fun TarjetaBus(b: Bus, siguiendo: Boolean, alSeguir: () -> Unit, verRuta: (() ->
     val color = colorSistema(b.system)
     val ctx = LocalContext.current
     val icono = remember(b.system) { IconosMapa.busArriba(ctx, android.graphics.Color.argb(255, (color.red * 255).toInt(), (color.green * 255).toInt(), (color.blue * 255).toInt()), b.system == "troncal" || b.system == "dual").asImageBitmap() }
-    Column(Modifier.padding(horizontal = 14.dp).padding(bottom = 10.dp).fillMaxWidth().clip(SuaveShape(24.dp)).background(LectorColors.Card).padding(14.dp)) {
+    Column(Modifier.padding(horizontal = 14.dp).padding(bottom = 10.dp).fillMaxWidth().border(1.dp, LectorColors.GlassBorder, SuaveShape(24.dp)).clip(SuaveShape(24.dp)).background(LectorColors.Glass).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).clip(SuaveShape(14.dp)).background(color.copy(alpha = 0.14f)), Alignment.Center) {
                 androidx.compose.foundation.Image(icono, null, Modifier.size(18.dp, 38.dp).graphicsLayer { rotationZ = 35f })
@@ -345,10 +345,10 @@ fun TarjetaBus(b: Bus, siguiendo: Boolean, alSeguir: () -> Unit, verRuta: (() ->
             Box(Modifier.size(36.dp).clip(SuaveShape(12.dp)).pressable(cerrar), Alignment.Center) { Icon(Icons.Rounded.Close, "Cerrar", tint = LectorColors.Muted) }
         }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.clip(SuaveShape(14.dp)).background(if (siguiendo) MaterialTheme.colorScheme.primary else LectorColors.PillFill).pressable(alSeguir).padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.CenterFocusStrong, null, tint = if (siguiendo) MaterialTheme.colorScheme.onPrimary else LectorColors.Text, modifier = Modifier.size(16.dp))
+            Row(Modifier.clip(SuaveShape(14.dp)).background(if (siguiendo) rellenoActivo().first else LectorColors.PillFill).pressable(alSeguir).padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.CenterFocusStrong, null, tint = if (siguiendo) rellenoActivo().second else LectorColors.Text, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(if (siguiendo) "Siguiendo" else "Seguir en el mapa", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = if (siguiendo) MaterialTheme.colorScheme.onPrimary else LectorColors.Text)
+                Text(if (siguiendo) "Siguiendo" else "Seguir en el mapa", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = if (siguiendo) rellenoActivo().second else LectorColors.Text)
             }
             if (verRuta != null) Row(Modifier.clip(SuaveShape(14.dp)).background(LectorColors.PillFill).pressable(verRuta).padding(horizontal = 14.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.Route, null, tint = LectorColors.Text, modifier = Modifier.size(16.dp))
