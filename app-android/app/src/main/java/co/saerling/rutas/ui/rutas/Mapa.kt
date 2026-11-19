@@ -217,7 +217,10 @@ fun Mapa(
                 iconAllowOverlap(true), iconIgnorePlacement(true), symbolSortKey(Expression.get("orden")),
             ))
             s.addLayer(SymbolLayer("buses-codigo", "buses").withProperties(
-                iconImage(Expression.get("etiqueta")), iconAnchor("top"), iconOffset(arrayOf(0f, 22f)), iconAllowOverlap(true), iconIgnorePlacement(true),
+                // Las etiquetas que chocan se ocultan (con 80 buses cerca era una sopa de códigos); el bus resaltado
+                // se coloca primero (clave más baja) y nunca pierde la suya.
+                iconImage(Expression.get("etiqueta")), iconAnchor("top"), iconOffset(arrayOf(0f, 22f)), iconAllowOverlap(false), iconIgnorePlacement(false),
+                iconPadding(2f), symbolSortKey(Expression.product(Expression.literal(-1), Expression.get("orden"))),
             ).apply { minZoom = 14f })
             s.addLayer(CircleLayer("incidentes-punto", "incidentes").withProperties(
                 circleRadius(6.5f), circleColor(Expression.get("color")), circleStrokeColor(0xFFFFFFFF.toInt()), circleStrokeWidth(2f),
