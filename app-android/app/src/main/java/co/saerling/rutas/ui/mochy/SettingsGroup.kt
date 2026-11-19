@@ -318,7 +318,7 @@ private fun SettingsItemRow(
             }
             val titleColor = when {
                 !item.enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                style == SettingsGroupStyle.Grouped -> MaterialTheme.colorScheme.onSurfaceVariant
+                // Rutas: el título en el color del texto también en «Grouped», para que se distinga del detalle gris.
                 else -> MaterialTheme.colorScheme.onSurface
             }
             ProvideTextStyle(titleBaseStyle.copy(color = titleColor)) {
