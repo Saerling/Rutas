@@ -29,12 +29,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import co.saerling.rutas.data.*
 import co.saerling.rutas.ui.*
 import co.saerling.rutas.fx.inclinar
+import co.saerling.rutas.ui.mochy.SwipeAction
+import co.saerling.rutas.ui.mochy.SwipeActionsBox
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -826,6 +831,7 @@ fun nombreSistema(s: String?) = when (s) {
 @Composable
 fun GuardadosScreen(abrir: (Capa) -> Unit) {
     PaginaPestana("Guardados") {
+        val hayGuardados = Guardados.paraderos.isNotEmpty() || Guardados.rutas.isNotEmpty() || Guardados.casa != null || Guardados.trabajo != null
         if (Guardados.paraderos.isEmpty() && Guardados.rutas.isEmpty() && Guardados.casa == null && Guardados.trabajo == null) {
             item("vacio") { Vacio("Aún no guardas nada", "Toca la estrella en un paradero o una ruta y aparecerá aquí, con sus próximos buses.") }
         }
@@ -842,26 +848,30 @@ fun GuardadosScreen(abrir: (Capa) -> Unit) {
         }
         if (Guardados.rutas.isNotEmpty()) item("rt") { Seccion("Rutas") }
         itemsIndexed(Guardados.rutas, key = { i, x -> "r$i-" + x.id }) { _, g ->
-            Row(Modifier.revelar("gr" + g.id), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { FilaRuta(RouteRef(g.id, code = g.codigo, name = g.nombre, system = g.sistema)) { abrir(Capa.Ruta(g.id)) } }
-                BotonQuitar { Guardados.quitarRuta(g.id); Avisos.mostrar("Ruta quitada", "Deshacer") { Guardados.devolver(g) } }
+            Quitable(alQuitar = { Guardados.quitarRuta(g.id); Avisos.mostrar("Ruta quitada", "Deshacer") { Guardados.devolver(g) } }, modifier = Modifier.revelar("gr" + g.id)) {
+                FilaRuta(RouteRef(g.id, code = g.codigo, name = g.nombre, system = g.sistema)) { abrir(Capa.Ruta(g.id)) }
             }
+        }
+        if (hayGuardados) item("deslizar-ayuda") {
+            Text("Desliza una fila a la izquierda para quitarla.", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(horizontal = Margen, vertical = 14.dp))
         }
     }
 }
 
 @Composable
-private fun BotonQuitar(alQuitar: () -> Unit) {
-    Box(Modifier.padding(end = 12.dp).size(40.dp).clip(SuaveShape(14.dp)).pressable { Tacto.tic(); alQuitar() }, Alignment.Center) {
-        Icon(Icons.Rounded.Close, "Quitar", tint = LectorColors.Muted, modifier = Modifier.size(20.dp))
-    }
+private fun Quitable(alQuitar: () -> Unit, modifier: Modifier = Modifier, slab: Boolean = true, contenido: @Composable () -> Unit) {
+    SwipeActionsBox(
+        modifier = modifier.semantics { customActions = listOf(CustomAccessibilityAction("Quitar") { alQuitar(); true }) },
+        end = { SwipeAction(Icons.Rounded.Delete, Color(0xFFFF453A), "Quitar", alQuitar) },
+        slab = slab,
+        content = contenido,
+    )
 }
 
 @Composable
 private fun FilaQuitable(icono: ImageVector, titulo: String, detalle: String, onClick: () -> Unit, alQuitar: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f)) { FilaLugar(icono, titulo, detalle, onClick = onClick) }
-        BotonQuitar(alQuitar)
+    Quitable(alQuitar = alQuitar) {
+        FilaLugar(icono, titulo, detalle, onClick = onClick)
     }
 }
 
@@ -870,21 +880,23 @@ private fun FilaQuitable(icono: ImageVector, titulo: String, detalle: String, on
 private fun ParaderoConBuses(g: ParaderoGuardado, modifier: Modifier, onClick: () -> Unit, alQuitar: () -> Unit) {
     var detalle by remember { mutableStateOf<StopDetail?>(null) }
     LaunchedEffect(g.id) { while (true) { runCatching { Api.paradero(g.id) }.onSuccess { detalle = it }; delay(30_000) } }
-    Tarjeta(modifier.padding(horizontal = Margen).padding(bottom = 10.dp), onClick = onClick) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(if (g.estacion) Icons.Rounded.Train else Icons.Rounded.DirectionsBus, null, tint = LectorColors.Muted, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(g.nombre, style = LectorType.Section, color = LectorColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Box(Modifier.size(32.dp).clip(SuaveShape(12.dp)).pressable { Tacto.tic(); alQuitar() }, Alignment.Center) { Icon(Icons.Rounded.Close, "Quitar", tint = LectorColors.Muted, modifier = Modifier.size(18.dp)) }
-        }
-        Spacer(Modifier.height(8.dp))
-        val proximos = detalle?.arrivals.orEmpty().distinctBy { it.code }.take(4)
-        if (proximos.isEmpty()) Text(if (detalle == null) "Cargando…" else "Sin buses próximos", style = LectorType.Label, color = LectorColors.Muted)
-        proximos.forEach { a ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.widthIn(min = 64.dp)) { Insignia(a.code, a.system) }
-                Text(a.name, style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.weight(1f), maxLines = 1)
-                Minutos(a)
+    Quitable(alQuitar = alQuitar, modifier = modifier.padding(horizontal = Margen).padding(bottom = 10.dp), slab = false) {
+        Tarjeta(Modifier, onClick = onClick) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(if (g.estacion) Icons.Rounded.Train else Icons.Rounded.DirectionsBus, null, tint = LectorColors.Muted, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(g.nombre, style = LectorType.Section, color = LectorColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(8.dp))
+            val proximos = detalle?.arrivals.orEmpty().distinctBy { it.code }.take(4)
+            if (proximos.isEmpty()) Text(if (detalle == null) "Cargando…" else "Sin buses próximos", style = LectorType.Label, color = LectorColors.Muted)
+            proximos.forEach { a ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.widthIn(min = 52.dp)) { Insignia(a.code, a.system) }
+                    Spacer(Modifier.width(8.dp))
+                    Text(a.name, style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.weight(1f), maxLines = 1)
+                    Minutos(a)
+                }
             }
         }
     }
