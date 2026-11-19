@@ -3,6 +3,8 @@ package co.saerling.rutas.data
 import co.saerling.rutas.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -38,33 +40,84 @@ object Api {
     /** Solo para las capturas de prueba: devuelve el JSON de cada ruta sin salir a la red. */
     var simulado: ((String) -> String?)? = null
 
-    private suspend inline fun <reified T> get(ruta: String): T {
+    /**
+     * [vigencia]: cuánto sirve una respuesta ya traída. Varias pantallas piden lo mismo (Cerca, Guardados y el detalle
+     * piden el mismo paradero; Cerca y Vías, las mismas novedades): dentro de ese plazo no se vuelve a salir a la red.
+     */
+    private suspend inline fun <reified T> get(ruta: String, vigencia: Long = 0L): T {
         if (kotlin.coroutines.coroutineContext[ClaveFondo] == null && simulado == null) Visible.en.first { it }
-        return pedir(ruta)
+        return json.decodeFromString<T>(texto(ruta, vigencia))
     }
 
-    private suspend inline fun <reified T> pedir(ruta: String): T = withContext(Dispatchers.IO) {
-        simulado?.invoke(ruta)?.let { return@withContext json.decodeFromString<T>(it) }
-        http.newCall(Request.Builder().url(BuildConfig.API + ruta).header("Accept", "application/json").build()).execute().use { res ->
-            val cuerpo = res.body?.string().orEmpty()
-            if (!res.isSuccessful) {
-                val codigo = Regex("\"code\"\\s*:\\s*\"([^\"]+)\"").find(cuerpo)?.groupValues?.get(1) ?: "http_${res.code}"
-                throw ApiError(codigo, "El servidor respondió ${res.code}")
+    private class Guardado(val cuerpo: String, val en: Long)
+    /** Últimas respuestas (máximo 64, la más vieja sale primero). */
+    private val memoria = object : LinkedHashMap<String, Guardado>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Guardado>?) = size > 64
+    }
+    /** Una petición en curso y cuántas pantallas la esperan: si dos piden lo mismo a la vez, viaja una sola. */
+    private class EnCurso(val tarea: kotlinx.coroutines.Deferred<String>, var esperando: Int = 0)
+    private val enCurso = HashMap<String, EnCurso>()
+    private val candado = kotlinx.coroutines.sync.Mutex()
+    private val alcance = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+    private suspend fun texto(ruta: String, vigencia: Long): String {
+        simulado?.invoke(ruta)?.let { return it }
+        val viaje = candado.withLock {
+            if (vigencia > 0) memoria[ruta]?.takeIf { System.currentTimeMillis() - it.en < vigencia }?.let { return it.cuerpo }
+            val v = enCurso.getOrPut(ruta) {
+                EnCurso(alcance.async {
+                    try {
+                        descargar(ruta).also { c -> if (vigencia > 0) candado.withLock { memoria[ruta] = Guardado(c, System.currentTimeMillis()) } }
+                    } finally {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { candado.withLock { enCurso.remove(ruta) } }
+                    }
+                })
             }
-            json.decodeFromString<T>(cuerpo)
+            v.esperando++
+            v
+        }
+        try {
+            return viaje.tarea.await()
+        } finally {
+            // Si ya nadie espera esta respuesta (se cerró la pantalla, se siguió escribiendo), se corta la descarga.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                candado.withLock { viaje.esperando--; if (viaje.esperando == 0 && viaje.tarea.isActive) viaje.tarea.cancel() }
+            }
         }
     }
 
-    suspend fun salud(): Health = get("/api/health")
-    suspend fun cerca(lat: Double, lon: Double): Nearby = get("/api/nearby?lat=${r(lat)}&lon=${r(lon)}")
-    suspend fun buscar(texto: String): SearchResult = get("/api/search?q=${q(texto)}")
-    suspend fun paradero(id: String): StopDetail = get("/api/stops/${q(id)}")
-    suspend fun ruta(id: String): RouteDetail = get("/api/routes/${q(id)}")
-    suspend fun novedades(): Novedades = get("/api/alerts")
-    suspend fun vehiculos(lat: Double, lon: Double, radio: Int = 1500): Vehiculos = get("/api/vehicles?lat=${r(lat)}&lon=${r(lon)}&radius=$radio")
-    suspend fun trafico(): Trafico = get("/api/traffic")
-    suspend fun noticias(): Noticias = get("/api/news")
-    suspend fun incidentes(): Incidentes = get("/api/incidents")
+    /** La llamada se cancela de verdad si nadie la espera (p. ej. al seguir escribiendo en Buscar): no gasta datos. */
+    private suspend fun descargar(ruta: String): String = kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+        val llamada = http.newCall(Request.Builder().url(BuildConfig.API + ruta).header("Accept", "application/json").build())
+        cont.invokeOnCancellation { llamada.cancel() }
+        llamada.enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) { if (cont.isActive) cont.resumeWith(Result.failure(e)) }
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                val r = runCatching {
+                    response.use { res ->
+                        val cuerpo = res.body?.string().orEmpty()
+                        if (!res.isSuccessful) {
+                            val codigo = Regex("\"code\"\\s*:\\s*\"([^\"]+)\"").find(cuerpo)?.groupValues?.get(1) ?: "http_${res.code}"
+                            throw ApiError(codigo, "El servidor respondió ${res.code}")
+                        }
+                        cuerpo
+                    }
+                }
+                if (cont.isActive) cont.resumeWith(r)
+            }
+        })
+    }
+
+    suspend fun salud(): Health = get("/api/health", 30_000)
+    suspend fun cerca(lat: Double, lon: Double): Nearby = get("/api/nearby?lat=${r(lat)}&lon=${r(lon)}", 60_000)
+    suspend fun buscar(texto: String): SearchResult = get("/api/search?q=${q(texto)}", 5 * 60_000)
+    suspend fun paradero(id: String): StopDetail = get("/api/stops/${q(id)}", 8_000)
+    suspend fun ruta(id: String): RouteDetail = get("/api/routes/${q(id)}", 8_000)
+    suspend fun novedades(): Novedades = get("/api/alerts", 60_000)
+    suspend fun vehiculos(lat: Double, lon: Double, radio: Int = 1500): Vehiculos = get("/api/vehicles?lat=${r(lat)}&lon=${r(lon)}&radius=$radio", 8_000)
+    suspend fun trafico(): Trafico = get("/api/traffic", 20_000)
+    suspend fun noticias(): Noticias = get("/api/news", 5 * 60_000)
+    suspend fun incidentes(): Incidentes = get("/api/incidents", 5 * 60_000)
     /** Plantilla de los mosaicos de flujo de TomTom (pasan por el servidor para no poner la clave en la app). */
     fun mosaicosTrafico(oscuro: Boolean) = BuildConfig.API + "/api/tiles?z={z}&x={x}&y={y}" + if (oscuro) "&dark=1" else ""
     suspend fun lugares(texto: String, lat: Double?, lon: Double?): List<Place> =

@@ -64,7 +64,10 @@ fun PaginaPestana(
     atras: (() -> Unit)? = null,
     contenido: LazyListScope.() -> Unit,
 ) {
-    val desplazado = estado.firstVisibleItemIndex > 0 || estado.firstVisibleItemScrollOffset > 40
+    // derivedStateOf: la página solo se recompone cuando cruza el umbral, no en cada cuadro del scroll.
+    val desplazado by androidx.compose.runtime.remember(estado) {
+        androidx.compose.runtime.derivedStateOf { estado.firstVisibleItemIndex > 0 || estado.firstVisibleItemScrollOffset > 40 }
+    }
     val escala by animateFloatAsState(if (desplazado) 0.82f else 1f, tween(260, easing = EnfasisEasing), label = "titulo")
     LazyColumn(
         state = estado,
@@ -190,8 +193,10 @@ fun FilaParadero(s: Stop, onClick: () -> Unit, modifier: Modifier = Modifier) {
 
 fun distancia(m: Double): String = if (m < 1000) "${m.toInt()} m · ${(m / 80).toInt().coerceAtLeast(1)} min a pie" else "%.1f km".format(m / 1000)
 
+private val Bogota: java.time.ZoneId = java.time.ZoneId.of("America/Bogota")
+
 fun hora(iso: String?): String = runCatching {
-    java.time.OffsetDateTime.parse(iso).atZoneSameInstant(java.time.ZoneId.of("America/Bogota")).toLocalTime().let { "%d:%02d".format(it.hour, it.minute) }
+    java.time.OffsetDateTime.parse(iso).atZoneSameInstant(Bogota).toLocalTime().let { "%d:%02d".format(it.hour, it.minute) }
 }.getOrDefault("")
 
 fun duracion(min: Int) = if (min < 60) "$min min" else "${min / 60} h ${min % 60} min"
