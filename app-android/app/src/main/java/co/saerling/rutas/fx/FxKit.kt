@@ -5,6 +5,7 @@ package co.saerling.rutas.fx
 // Sin dependencias extra: solo Compose (foundation, ui, material3).
 // Cada efecto es un Modifier o un @Composable y se activa desde "Biblioteca de animaciones y funciones".
 
+import androidx.compose.foundation.selection.selectable
 import android.os.BatteryManager
 import android.os.Build
 import androidx.compose.animation.*
@@ -775,7 +776,7 @@ fun SegmentadoDeslizante(opciones: List<String>, sel: Int, onSel: (Int) -> Unit,
     val fondo = LocalContentColor.current.copy(alpha = .08f)
     Box(modifier.clip(Pildora).background(fondo).padding(3.dp)) {
         Box(Modifier.offset { IntOffset(x.roundToInt(), 0) }.size(with(d) { w.toDp() }, 36.dp).clip(Pildora).background(color))
-        Row { opciones.forEachIndexed { i, o -> Box(Modifier.height(36.dp).onSizeChanged { s -> anchos = anchos.toMutableList().also { it[i] = s.width.toFloat() } }.clip(Pildora).clickable { onSel(i) }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) { Text(o, color = if (i == sel) contraste(color) else LocalContentColor.current, style = MaterialTheme.typography.labelLarge) } } }
+        Row { opciones.forEachIndexed { i, o -> Box(Modifier.height(36.dp).onSizeChanged { s -> anchos = anchos.toMutableList().also { it[i] = s.width.toFloat() } }.clip(Pildora).selectable(selected = i == sel, role = androidx.compose.ui.semantics.Role.Tab) { onSel(i) }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) { Text(o, color = if (i == sel) contraste(color) else LocalContentColor.current, style = MaterialTheme.typography.labelLarge) } } }
     }
 }
 

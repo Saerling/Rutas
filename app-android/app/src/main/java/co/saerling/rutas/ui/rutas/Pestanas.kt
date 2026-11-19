@@ -591,7 +591,8 @@ fun IrScreen(abrir: (Capa) -> Unit) {
                             Box(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen).padding(top = 18.dp)) {
                                 co.saerling.rutas.fx.SegmentadoDeslizante(
                                     listOf("Mejor", "Más rápido", "Menos a pie", "Menos transbordos"), Planeador.orden, { Tacto.tic(); Planeador.orden = it },
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                    // Gris iluminado en oscuro, nunca la pastilla casi blanca del acento monocromo.
+                                    color = rellenoActivo().first,
                                 )
                             }
                         }
