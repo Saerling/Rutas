@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.saerling.rutas.data.*
@@ -157,12 +158,33 @@ fun ParaderoScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
                     if (!det.feed.live) item("feed") { Text("TransMilenio no está publicando en vivo: los tiempos son del horario.", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(horizontal = Margen, vertical = 10.dp)) }
                     det.alerts.forEachIndexed { i, a -> item("al$i") { TarjetaAlerta(a) } }
                     if (lista.size > 1) item("luego") { Seccion("Después") }
-                    itemsIndexed(lista.drop(1).take(12), key = { i, a -> "lleg$i-${a.code}" }) { _, a ->
-                        Row(Modifier.fillMaxWidth().resaltable { a.routeId?.let { abrir(Capa.Ruta(it)) } }.padding(horizontal = Margen, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.widthIn(min = 72.dp)) { Insignia(a.code, a.system) }
-                            Text(a.name, style = LectorType.Body, color = LectorColors.Text, modifier = Modifier.weight(1f), maxLines = 1)
-                            Minutos(a)
-                            Campana(a, det.stop.id, det.stop.name)
+                    if (lista.size > 1) item("despues") {
+                        val siguientes = lista.drop(1).take(12)
+                        Column(
+                            Modifier.padding(horizontal = Margen)
+                                .fillMaxWidth()
+                                .clip(SuaveShape(24.dp))
+                                .background(LectorColors.Card)
+                                .border(1.dp, LectorColors.GlassBorder, SuaveShape(24.dp)),
+                        ) {
+                            siguientes.forEachIndexed { index, a ->
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .semantics(mergeDescendants = true) {}
+                                        .resaltable { a.routeId?.let { abrir(Capa.Ruta(it)) } }
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(Modifier.widthIn(min = 56.dp)) { Insignia(a.code, a.system) }
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(a.name, style = LectorType.Body, color = LectorColors.Text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Minutos(a)
+                                    Campana(a, det.stop.id, det.stop.name)
+                                }
+                                if (index < siguientes.lastIndex) {
+                                    Box(Modifier.padding(start = 16.dp).fillMaxWidth().height(1.dp).background(LectorColors.GlassBorder))
+                                }
+                            }
                         }
                     }
                     item("rutas-t") { Seccion("Rutas que paran aquí") }
