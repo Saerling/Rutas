@@ -1,5 +1,5 @@
 import { CromaError } from "./croma";
-import { leerFeed, type AlertaRt, type Vehiculo } from "./gtfsrt";
+import { leerFeed, leerViajes, type AlertaRt, type Vehiculo, type ViajeRt } from "./gtfsrt";
 
 /**
  * La red de TransMilenio/SITP sin intermediarios: el índice que arma scripts/red.py con el GTFS oficial
@@ -135,12 +135,10 @@ export interface Marcha { kmh: number; desde: [number, number]; ts: number }
 const ultimoReporte = new Map<string, { lat: number; lon: number; ts: number }>();
 export const marchas = new Map<string, Marcha>();
 
-export function posiciones(): Promise<Posiciones> {
+function crudas(): Promise<Posiciones> {
   return rt("positions.pb", RT_TTL_MS, (b) => {
     const { ts, vehiculos } = leerFeed(b);
-    const porRuta = new Map<string, Vehiculo[]>();
     for (const v of vehiculos) {
-      porRuta.set(v.rutaId, [...(porRuta.get(v.rutaId) ?? []), v]);
       const antes = ultimoReporte.get(v.id);
       if (antes && v.ts > antes.ts) {
         const dt = v.ts - antes.ts;
@@ -150,8 +148,89 @@ export function posiciones(): Promise<Posiciones> {
       }
       if (!antes || v.ts > antes.ts) ultimoReporte.set(v.id, { lat: v.lat, lon: v.lon, ts: v.ts });
     }
-    return { ts, vehiculos, porRuta };
+    return { ts, vehiculos, porRuta: new Map() };
   });
+}
+
+/** Buses con GPS reciente por debajo de esto = el feed de posiciones está caído y se completa con el horario. */
+const POCOS_GPS = 150;
+
+/**
+ * Posiciones de los buses. Si TransMilenio deja de publicar el GPS (pasa: positions.pb queda casi vacío), cada bus
+ * que tripupdates.pb dice que va en viaje se ubica sobre su recorrido según la hora de salida y el retraso.
+ */
+export async function posiciones(): Promise<Posiciones> {
+  const p = await crudas();
+  const ahora = Date.now() / 1000;
+  let vehiculos = p.vehiculos;
+  let ts = p.ts;
+  const frescos = vehiculos.filter((v) => ahora - v.ts <= 300);
+  if (frescos.length < POCOS_GPS) {
+    const [rd, vj] = await Promise.all([red(), rt("tripupdates.pb", 30_000, leerViajes).catch(() => null)]);
+    if (vj) {
+      const conGps = new Set(frescos.map((v) => v.id));
+      vehiculos = [...frescos, ...estimados(rd, vj.viajes, ahora).filter((v) => !conGps.has(v.id))];
+      ts = Math.max(ts, vj.ts);
+    }
+  }
+  const porRuta = new Map<string, Vehiculo[]>();
+  for (const v of vehiculos) porRuta.set(v.rutaId, [...(porRuta.get(v.rutaId) ?? []), v]);
+  return { ts, vehiculos, porRuta };
+}
+
+const segDe = (h: string) => { const [a, b, c] = h.split(":").map(Number); return a * 3600 + b * 60 + (c || 0); };
+
+/** Dónde va cada bus en viaje según su horario: en qué tramo y cuánto lleva, pegado a la vía. */
+function estimados(rd: Red, viajes: ViajeRt[], ahora: number): Vehiculo[] {
+  const out: Vehiculo[] = [];
+  const svcs = new Map<string, Set<string>>();
+  for (const v of viajes) {
+    const ri = rd.rutaIdx.get(v.rutaId);
+    if (ri === undefined || v.fecha.length !== 8) continue;
+    const y = +v.fecha.slice(0, 4), m = +v.fecha.slice(4, 6), d = +v.fecha.slice(6, 8);
+    const sal = segDe(v.inicio);
+    const base = Date.UTC(y, m - 1, d) / 1000 - BOGOTA_MS / 1000;
+    const e = ahora - (base + sal) - v.retraso;
+    if (e < 0 || e > 4 * 3600) continue;
+    let activos = svcs.get(v.fecha);
+    if (!activos) { activos = serviciosDe(rd, v.fecha, (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7); svcs.set(v.fecha, activos); }
+    // El recorrido: el que tiene una salida a esa hora (o la más cercana, para los viajes agregados).
+    let patron: Patron | null = null, mejor = 1800;
+    for (const p of rd.porRuta.get(ri) ?? []) {
+      if (e > p.t[p.t.length - 1] + 600) continue;
+      for (const [svc, salidas] of Object.entries(p.d)) {
+        if (!activos.has(svc)) continue;
+        for (const x of salidas) { const dd = Math.abs(x - sal); if (dd < mejor) { mejor = dd; patron = p; } }
+      }
+    }
+    if (!patron) continue;
+    const t = patron.t;
+    let k = 0;
+    while (k < t.length - 2 && t[k + 1] <= e) k++;
+    if (e >= t[t.length - 1]) continue; // ya llegó
+    const f = t[k + 1] > t[k] ? Math.min(1, Math.max(0, (e - t[k]) / (t[k + 1] - t[k]))) : 0;
+    const A = rd.paradas[patron.s[k]], B = rd.paradas[patron.s[k + 1]];
+    let lat = A[2] + (B[2] - A[2]) * f, lon = A[3] + (B[3] - A[3]) * f;
+    const ea = enVia(patron, A[2], A[3], 150), eb = enVia(patron, B[2], B[3], 150);
+    const tramo = ea && eb ? tramoEntre(patron, ea, eb, 50_000) : null;
+    if (tramo && tramo.length > 1) {
+      const largos = tramo.slice(1).map((q, i) => metros(tramo[i][1], tramo[i][0], q[1], q[0]));
+      let falta = largos.reduce((a, b) => a + b, 0) * f;
+      for (let i = 0; i < largos.length; i++) {
+        if (falta <= largos[i] || i === largos.length - 1) {
+          const g = largos[i] > 0 ? Math.min(1, falta / largos[i]) : 0;
+          lon = tramo[i][0] + (tramo[i + 1][0] - tramo[i][0]) * g; lat = tramo[i][1] + (tramo[i + 1][1] - tramo[i][1]) * g;
+          break;
+        }
+        falta -= largos[i];
+      }
+    }
+    out.push({
+      id: v.vehiculo, tripId: v.tripId, rutaId: v.rutaId, lat, lon, secuencia: k + 2, paradaId: B[0],
+      ts: Math.floor(ahora / 15) * 15, etiqueta: v.etiqueta, placa: v.placa, estimado: { patron: patron.i, k, f },
+    });
+  }
+  return out;
 }
 
 export function alertas(): Promise<AlertaRt[]> {
@@ -194,6 +273,7 @@ export interface Ubicado { patron: Patron; k: number; f: number }
 export function ubicar(rd: Red, v: Vehiculo): Ubicado | null {
   const ri = rd.rutaIdx.get(v.rutaId);
   if (ri === undefined) return null;
+  if (v.estimado) return { patron: rd.patrones[v.estimado.patron], k: v.estimado.k, f: v.estimado.f };
   const patrones = rd.porRuta.get(ri) ?? [];
   const px = v.lon * MLON, py = v.lat * MLAT;
   const P = rd.paradas;

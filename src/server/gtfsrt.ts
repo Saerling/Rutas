@@ -13,6 +13,12 @@ class Lector {
     return r;
   }
   bytes(): Uint8Array { const n = this.varint(); const s = this.b.subarray(this.pos, this.pos + n); this.pos += n; return s; }
+  /** int32 con signo (los negativos vienen en 10 bytes). */
+  entero(): number {
+    let r = 0n, m = 0n, x: number;
+    do { x = this.b[this.pos++]; r |= BigInt(x & 0x7f) << m; m += 7n; } while (x & 0x80);
+    return Number(BigInt.asIntN(32, r));
+  }
   float(): number { const v = new DataView(this.b.buffer, this.b.byteOffset + this.pos, 4).getFloat32(0, true); this.pos += 4; return v; }
   saltar(tipo: number) {
     if (tipo === 0) this.varint();
@@ -47,6 +53,8 @@ export interface Vehiculo {
   ts: number;
   etiqueta: string;
   placa: string;
+  /** Sin GPS: ubicado por horario en el recorrido [patron] (índice), tramo k con avance f. */
+  estimado?: { patron: number; k: number; f: number };
 }
 
 export interface AlertaRt {
@@ -108,4 +116,40 @@ export function leerFeed(buf: Uint8Array): { ts: number; vehiculos: Vehiculo[]; 
     }
   });
   return { ts, vehiculos, alertas };
+}
+
+/** Un viaje en curso según tripupdates.pb: no trae posición, solo cuándo salió y cuánto va retrasado. */
+export interface ViajeRt {
+  tripId: string;
+  rutaId: string;
+  inicio: string;
+  fecha: string;
+  retraso: number;
+  vehiculo: string;
+  etiqueta: string;
+  placa: string;
+}
+
+export function leerViajes(buf: Uint8Array): { ts: number; viajes: ViajeRt[] } {
+  let ts = 0;
+  const viajes: ViajeRt[] = [];
+  campos(buf, (c, _, l) => {
+    if (c === 1) campos(l.bytes(), (c2, _2, l2) => { if (c2 === 3) ts = l2.varint(); });
+    else if (c === 2) campos(l.bytes(), (c2, _2, l2) => {
+      if (c2 !== 3) return;
+      const v: ViajeRt = { tripId: "", rutaId: "", inicio: "", fecha: "", retraso: 0, vehiculo: "", etiqueta: "", placa: "" };
+      campos(l2.bytes(), (c3, t3, l3) => {
+        if (c3 === 1) campos(l3.bytes(), (c4, _4, l4) => {
+          if (c4 === 1) v.tripId = str(l4.bytes()); else if (c4 === 2) v.inicio = str(l4.bytes());
+          else if (c4 === 3) v.fecha = str(l4.bytes()); else if (c4 === 5) v.rutaId = str(l4.bytes());
+        });
+        else if (c3 === 3) campos(l3.bytes(), (c4, _4, l4) => {
+          if (c4 === 1) v.vehiculo = str(l4.bytes()); else if (c4 === 2) v.etiqueta = str(l4.bytes()); else if (c4 === 3) v.placa = str(l4.bytes());
+        });
+        else if (c3 === 5 && t3 === 0) v.retraso = l3.entero();
+      });
+      if (v.rutaId && v.inicio && v.fecha && v.vehiculo) viajes.push(v);
+    });
+  });
+  return { ts, viajes };
 }
