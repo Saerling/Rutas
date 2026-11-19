@@ -896,12 +896,20 @@ fun AjustesScreen(abrir: (Capa) -> Unit) {
     LaunchedEffect(Unit) { MapaOffline.revisar(ctx) }
     PaginaPestana("Ajustes") {
         item("tr") { Seccion("Transporte") }
-        item("tull") { FilaAjuste(Icons.Rounded.Contactless, "Tarjeta TuLlave", "Leer saldo y movimientos con NFC") { abrir(Capa.Tarjeta) } }
-        item("vias") { FilaAjuste(Icons.Rounded.Traffic, "Estado de las vías", "Tráfico de Bogotá medido con los buses en vivo") { abrir(Capa.Vias) } }
-        item("nov") { FilaAjuste(Icons.Rounded.Campaign, "Novedades del sistema", "Desvíos, cierres y cambios de TransMilenio") { abrir(Capa.Novedades) } }
+        item("transporte") {
+            GrupoAjustes(listOf(
+                itemAjuste(Icons.Rounded.Contactless, "Tarjeta TuLlave", "Leer saldo y movimientos con NFC") { abrir(Capa.Tarjeta) },
+                itemAjuste(Icons.Rounded.Traffic, "Estado de las vías", "Tráfico de Bogotá medido con los buses en vivo") { abrir(Capa.Vias) },
+                itemAjuste(Icons.Rounded.Campaign, "Novedades del sistema", "Desvíos, cierres y cambios de TransMilenio") { abrir(Capa.Novedades) },
+            ))
+        }
         item("p") { Seccion("Apariencia") }
-        item("pers") { FilaAjuste(Icons.Rounded.Palette, "Personalización", "Tema, acento, cristal, esquinas, animaciones y más") { abrir(Capa.Personalizacion) } }
-        item("fx") { FilaAjuste(Icons.Rounded.AutoAwesome, "Biblioteca de animaciones y funciones", "${co.saerling.rutas.fx.Fx.count(IdsFxRutas)} de ${IdsFxRutas.size} activas · Magic UI, NumberFlow, coss ui, Motion Primitives") { abrir(Capa.BibliotecaFx) } }
+        item("apariencia") {
+            GrupoAjustes(listOf(
+                itemAjuste(Icons.Rounded.Palette, "Personalización", "Tema, acento, cristal, esquinas, animaciones y más") { abrir(Capa.Personalizacion) },
+                itemAjuste(Icons.Rounded.AutoAwesome, "Biblioteca de animaciones y funciones", "${co.saerling.rutas.fx.Fx.count(IdsFxRutas)} de ${IdsFxRutas.size} activas · Magic UI, NumberFlow, coss ui, Motion Primitives") { abrir(Capa.BibliotecaFx) },
+            ))
+        }
         item("m") { Seccion("Mapa sin conexión") }
         item("offline") {
             Tarjeta(Modifier.padding(horizontal = Margen), radio = 24.dp) {
@@ -928,15 +936,15 @@ fun AjustesScreen(abrir: (Capa) -> Unit) {
             }
         }
         item("a") { Seccion("La app") }
-        item("upd") {
-            FilaAjuste(Icons.Rounded.SystemUpdate, "Buscar actualizaciones", "Tienes la ${co.saerling.rutas.NuevaVersion.nombreActual(ctx)}") {
-                co.saerling.rutas.NuevaVersion.buscarAhora(ctx)
-            }
-        }
-        item("code") {
-            FilaAjuste(Icons.Rounded.Code, "Código fuente", "github.com/Saerling/Rutas") {
-                ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Saerling/Rutas")))
-            }
+        item("app") {
+            GrupoAjustes(listOf(
+                itemAjuste(Icons.Rounded.SystemUpdate, "Buscar actualizaciones", "Tienes la ${co.saerling.rutas.NuevaVersion.nombreActual(ctx)}") {
+                    co.saerling.rutas.NuevaVersion.buscarAhora(ctx)
+                },
+                itemAjuste(Icons.Rounded.Code, "Código fuente", "github.com/Saerling/Rutas") {
+                    ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Saerling/Rutas")))
+                },
+            ))
         }
         item("cred") {
             Text(

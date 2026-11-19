@@ -163,6 +163,23 @@ fun FilaAjuste(icon: ImageVector?, titulo: String, detalle: String? = null, onCl
 }
 
 @Composable
+fun itemAjuste(icon: ImageVector?, titulo: String, detalle: String? = null, onClick: () -> Unit): SettingsItem =
+    SettingsItem(
+        icon = icon?.let { rememberVectorPainter(it) },
+        title = { androidx.compose.material3.Text(titulo) },
+        descriptionText = detalle,
+        onClick = onClick,
+    )
+
+/** Varias filas de ajustes en una sola tarjeta (SettingsGroup «Grouped» de Mochy), con el margen de las páginas. */
+@Composable
+fun GrupoAjustes(filas: List<SettingsItem>) {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+        SettingsGroup(items = filas, style = SettingsGroupStyle.Grouped)
+    }
+}
+
+@Composable
 fun FilaSwitch(titulo: String, detalle: String? = null, activado: Boolean, onChange: (Boolean) -> Unit) {
     TarjetaFila(
         SettingsItem(
