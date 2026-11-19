@@ -198,8 +198,14 @@ fun Mapa(
             }
             // Lejos, puntos de color; de cerca, la placa con el bus (como las señales de la calle).
             s.addLayer(SymbolLayer("puntos", "puntos").withProperties(
-                iconImage(Expression.step(Expression.zoom(), Expression.get("lejos"), Expression.stop(14.6, Expression.get("cerca")))),
-                iconAnchor(Expression.step(Expression.zoom(), Expression.get("anclaLejos"), Expression.stop(14.6, Expression.literal("bottom")))),
+                // Las estaciones (orden 1, más espaciadas) pasan a placa en 14.6; los paraderos SITP, cada 200 m, esperan
+                // a 15.6: antes, en la vista de una ruta, sus placas se montaban unas sobre otras.
+                iconImage(Expression.step(Expression.zoom(), Expression.get("lejos"),
+                    Expression.stop(14.6, Expression.switchCase(Expression.eq(Expression.get("orden"), Expression.literal(1)), Expression.get("cerca"), Expression.get("lejos"))),
+                    Expression.stop(15.6, Expression.get("cerca")))),
+                iconAnchor(Expression.step(Expression.zoom(), Expression.get("anclaLejos"),
+                    Expression.stop(14.6, Expression.switchCase(Expression.eq(Expression.get("orden"), Expression.literal(1)), Expression.literal("bottom"), Expression.get("anclaLejos"))),
+                    Expression.stop(15.6, Expression.literal("bottom")))),
                 iconAllowOverlap(true), iconIgnorePlacement(true), symbolSortKey(Expression.get("orden")),
             ))
             // Tramo recorrido por cada bus en tráfico mixto, del color de su velocidad (debajo de los buses).
