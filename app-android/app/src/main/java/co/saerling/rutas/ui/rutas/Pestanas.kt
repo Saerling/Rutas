@@ -790,6 +790,17 @@ fun BuscarScreen(abrir: (Capa) -> Unit) {
         val r = res
         when {
             texto.trim().length < 2 -> item("ej") {
+                if (Guardados.busquedas.isNotEmpty()) {
+                    Seccion("Recientes")
+                    Guardados.busquedas.forEachIndexed { i, busqueda ->
+                        Row(Modifier.fillMaxWidth().resaltable { Tacto.tic(); texto = busqueda }.padding(horizontal = Margen, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.History, null, tint = LectorColors.Muted)
+                            Spacer(Modifier.width(12.dp))
+                            Text(busqueda, style = LectorType.Body, color = LectorColors.Text)
+                        }
+                    }
+                    BotonExpresivo("Borrar recientes", null, { Guardados.borrarBusquedas() }, Modifier.padding(horizontal = Margen), estilo = EstiloBoton.TEXTO)
+                }
                 Seccion("Prueba con")
                 Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("K635", "B10", "Portal Norte", "Calle 72", "H710", "TransMiCable").forEach { ChipSel(it, false) { texto = it } }
@@ -800,10 +811,32 @@ fun BuscarScreen(abrir: (Capa) -> Unit) {
             r == null -> item("c") { CargandoFilas(4) }
             r.routes.isEmpty() && r.stops.isEmpty() -> item("n") { Vacio("Nada para «${texto.trim()}»", "Prueba con el código del bus o el nombre de la estación.") }
             else -> {
-                if (r.routes.isNotEmpty()) item("rt") { Seccion("Rutas") }
-                itemsIndexed(r.routes, key = { i, x -> "r$i-" + x.id }) { _, ro -> FilaRuta(ro, Modifier.revelar("br" + ro.id)) { abrir(Capa.Ruta(ro.id)) } }
-                if (r.stops.isNotEmpty()) item("st") { Seccion("Paraderos y estaciones") }
-                itemsIndexed(r.stops, key = { i, x -> "s$i-" + x.id }) { _, s -> FilaParadero(s, { abrir(Capa.Paradero(s.id)) }, Modifier.revelar("bs" + s.id)) }
+                val mejorRuta = r.routes.firstOrNull()
+                val mejorParadero = if (mejorRuta == null) r.stops.firstOrNull() else null
+                item("mejor") {
+                    Seccion("Mejor resultado")
+                    if (mejorRuta != null) co.saerling.rutas.ui.mochy.search.TopResultCard(
+                        artwork = { Insignia(mejorRuta.code, mejorRuta.system, grande = true) },
+                        title = mejorRuta.name,
+                        detail = nombreSistema(mejorRuta.system) + (mejorRuta.variant?.let { " · $it" } ?: ""),
+                        onClick = { Guardados.recordarBusqueda(texto); abrir(Capa.Ruta(mejorRuta.id)) },
+                        actionIcon = Icons.Rounded.ChevronRight,
+                        actionDescription = "Abrir ruta ${mejorRuta.code}",
+                    ) else if (mejorParadero != null) co.saerling.rutas.ui.mochy.search.TopResultCard(
+                        artwork = { Box(Modifier.size(44.dp).clip(SuaveShape(14.dp)).background(LectorColors.CardHigh), Alignment.Center) { Icon(if (mejorParadero.kind == "station") Icons.Rounded.Train else Icons.Rounded.DirectionsBus, null, tint = LectorColors.Text, modifier = Modifier.size(22.dp)) } },
+                        title = mejorParadero.name,
+                        detail = listOfNotNull(if (mejorParadero.kind == "station") "Estación" else "Paradero SITP", mejorParadero.distanceM?.let { distancia(it) }).joinToString(" · "),
+                        onClick = { Guardados.recordarBusqueda(texto); abrir(Capa.Paradero(mejorParadero.id)) },
+                        actionIcon = Icons.Rounded.ChevronRight,
+                        actionDescription = "Abrir ${mejorParadero.name}",
+                    )
+                }
+                val rutasRestantes = r.routes.drop(if (mejorRuta != null) 1 else 0)
+                val paraderosRestantes = r.stops.drop(if (mejorParadero != null) 1 else 0)
+                if (rutasRestantes.isNotEmpty()) item("rt") { Seccion("Rutas") }
+                itemsIndexed(rutasRestantes, key = { i, x -> "r$i-" + x.id }) { _, ro -> FilaRuta(ro, Modifier.revelar("br" + ro.id)) { Guardados.recordarBusqueda(texto); abrir(Capa.Ruta(ro.id)) } }
+                if (paraderosRestantes.isNotEmpty()) item("st") { Seccion("Paraderos y estaciones") }
+                itemsIndexed(paraderosRestantes, key = { i, x -> "s$i-" + x.id }) { _, s -> FilaParadero(s, { Guardados.recordarBusqueda(texto); abrir(Capa.Paradero(s.id)) }, Modifier.revelar("bs" + s.id)) }
             }
         }
     }

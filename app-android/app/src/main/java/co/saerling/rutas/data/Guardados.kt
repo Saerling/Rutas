@@ -13,6 +13,7 @@ import kotlinx.serialization.json.Json
 @Serializable private data class Datos(
     val paraderos: List<ParaderoGuardado> = emptyList(), val rutas: List<RutaGuardada> = emptyList(),
     val casa: Place? = null, val trabajo: Place? = null, val recientes: List<Place> = emptyList(),
+    val busquedas: List<String> = emptyList(),
 )
 
 /** Paraderos, rutas, casa, trabajo y lugares recientes. Solo en el teléfono. Es estado de Compose. */
@@ -34,6 +35,7 @@ object Guardados {
     val casa get() = datos.casa
     val trabajo get() = datos.trabajo
     val recientes get() = datos.recientes
+    val busquedas get() = datos.busquedas
 
     fun esParadero(id: String) = datos.paraderos.any { it.id == id }
     fun esRuta(id: String) = datos.rutas.any { it.id == id }
@@ -57,4 +59,12 @@ object Guardados {
     fun ponerCasa(p: Place?) = guardar(datos.copy(casa = p))
     fun ponerTrabajo(p: Place?) = guardar(datos.copy(trabajo = p))
     fun recordar(p: Place) = guardar(datos.copy(recientes = (listOf(p) + datos.recientes.filterNot { it.id == p.id && it.name == p.name }).take(8)))
+
+    fun recordarBusqueda(t: String) {
+        val texto = t.trim()
+        if (texto.length < 2) return
+        guardar(datos.copy(busquedas = (listOf(texto) + datos.busquedas.filterNot { it.equals(texto, ignoreCase = true) }).take(8)))
+    }
+
+    fun borrarBusquedas() = guardar(datos.copy(busquedas = emptyList()))
 }
