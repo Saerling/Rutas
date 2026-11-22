@@ -80,6 +80,11 @@ export const es = {
     generic: "TransMilenio reporta una novedad en esta ruta.",
   },
 
+  widget: {
+    empty: "Guarda un paradero en Rutas para verlo aquí.",
+    none: "No vemos buses próximos.",
+  },
+
   home: {
     first: {
       title: "Guarda tu paradero de siempre",

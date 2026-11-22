@@ -95,7 +95,26 @@
           "locationWhenInUsePermission": "Rutas usa tu ubicación solo mientras la tienes abierta, para mostrarte los paraderos y estaciones cerca de ti. No la guardamos."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-widgets",
+        {
+          "enableAndroid": true,
+          "widgets": [
+            {
+              "name": "NextBus",
+              "displayName": "Tu paradero",
+              "description": "Los próximos buses de tu primer paradero guardado.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

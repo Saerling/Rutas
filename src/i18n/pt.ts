@@ -78,6 +78,11 @@ export const pt: Messages = {
     generic: "A TransMilenio informa uma mudança nesta linha.",
   },
 
+  widget: {
+    empty: "Salve uma parada no Rutas para vê-la aqui.",
+    none: "Nenhum ônibus chegando.",
+  },
+
   home: {
     first: {
       title: "Salve a parada que você sempre usa",

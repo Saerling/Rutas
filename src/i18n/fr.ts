@@ -78,6 +78,11 @@ export const fr: Messages = {
     generic: "TransMilenio signale une perturbation sur cette ligne.",
   },
 
+  widget: {
+    empty: "Enregistrez un arrêt dans Rutas pour le voir ici.",
+    none: "Aucun bus à venir.",
+  },
+
   home: {
     first: {
       title: "Enregistrez votre arrêt habituel",

@@ -77,6 +77,11 @@ export const en: Messages = {
     generic: "TransMilenio reports a change on this route.",
   },
 
+  widget: {
+    empty: "Save a stop in Rutas to see it here.",
+    none: "No buses coming up.",
+  },
+
   home: {
     first: {
       title: "Save the stop you always use",

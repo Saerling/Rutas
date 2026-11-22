@@ -26,6 +26,7 @@ import { prefetchStop, useHealth, useNearby } from "@/lib/api";
 import { greeting } from "@/lib/format";
 import { BOGOTA, useLocation } from "@/lib/location";
 import { toggleStop, useSaved, type SavedStop } from "@/lib/saved";
+import { useWidgetSync } from "@/lib/widget";
 import { usePalette } from "@/theme/colors";
 import { layout, radius, size, space } from "@/theme/tokens";
 
@@ -41,6 +42,7 @@ export default function Home() {
   const position = useSharedValue(height);
   const { state, retry } = useLocation();
   const health = useHealth();
+  useWidgetSync();
   const savedStops = useSaved().filter((s): s is SavedStop => s.type === "stop");
 
   const here = state.status === "ready" ? { lat: state.lat, lon: state.lon } : null;

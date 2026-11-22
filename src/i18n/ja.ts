@@ -78,6 +78,11 @@ export const ja: Messages = {
     generic: "TransMilenioがこの系統の運行情報を出しています。",
   },
 
+  widget: {
+    empty: "Rutas で停留所を保存するとここに表示されます。",
+    none: "まもなく来るバスはありません。",
+  },
+
   home: {
     first: {
       title: "いつもの停留所を保存",

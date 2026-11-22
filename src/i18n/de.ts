@@ -78,6 +78,11 @@ export const de: Messages = {
     generic: "TransMilenio meldet eine Änderung auf dieser Linie.",
   },
 
+  widget: {
+    empty: "Speichere eine Haltestelle in Rutas, um sie hier zu sehen.",
+    none: "Keine Busse in Sicht.",
+  },
+
   home: {
     first: {
       title: "Speichere deine Stammhaltestelle",

@@ -78,6 +78,11 @@ export const zh: Messages = {
     generic: "TransMilenio 报告此线路有运营变动。",
   },
 
+  widget: {
+    empty: "在 Rutas 中保存一个站点即可在此查看。",
+    none: "暂无即将到站的车。",
+  },
+
   home: {
     first: {
       title: "保存你常用的站点",
