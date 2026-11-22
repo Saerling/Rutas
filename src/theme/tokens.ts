@@ -23,6 +23,8 @@ export const layout = {
   shadowBleed: space[6],
   screenEnd: 80,
   badgeColumn: 116,
+  /** The clock column on the left of a trip timeline. */
+  timeColumn: 56,
   mapInset: { top: 96, right: space[6], bottom: space[10], left: space[6] },
   sheetMap: 0.38,
 } as const;

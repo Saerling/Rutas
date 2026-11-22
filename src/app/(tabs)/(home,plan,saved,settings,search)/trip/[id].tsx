@@ -109,10 +109,21 @@ export default function TripScreen() {
         <Text variant="title" style={styles.heading}>
           {t.plan.trip.steps}
         </Text>
-        {it.legs.map((leg, i) => (
-          <Step key={i} leg={leg} current={on && "leg" in guidance && guidance.leg === i} />
-        ))}
+        {it.legs.map((leg, i) => {
+          const at = on && "leg" in guidance ? guidance.leg : on && guidance.state === "arrived" ? it.legs.length : -1;
+          const prev = it.legs[i - 1];
+          const gap = prev ? Math.round((Date.parse(leg.start) - Date.parse(prev.end)) / 60_000) : 0;
+          return (
+            <View key={i}>
+              {gap > 1 && <Gap minutes={gap} />}
+              <Step leg={leg} state={i === at ? "now" : i < at ? "done" : "next"} />
+            </View>
+          );
+        })}
         <View style={styles.step}>
+          <Text variant="caption" tone="muted" tabular style={styles.time}>
+            {clock(last.end)}
+          </Text>
           <View style={styles.rail}>
             <Icon name={icons.flagEnd} color={p.text} size="md" />
           </View>
@@ -153,44 +164,97 @@ function Live({ guidance, legs }: { guidance: Guidance; legs: Leg[] }) {
   );
 }
 
-function Step({ leg, current }: { leg: Leg; current: boolean }) {
+/** The wait between getting off one bus and the next one leaving, like a free slot in a day plan. */
+function Gap({ minutes }: { minutes: number }) {
   const p = usePalette();
   const t = useT();
-  if (leg.mode !== "transit") {
-    return (
-      <View style={styles.step}>
-        <View style={styles.rail}>
-          <Icon name={icons.walk} color={current ? p.ink : p.muted} size="md" />
-        </View>
-        <View style={styles.body}>
-          <Text variant="headline">{t.plan.trip.walkTo(leg.to.name)}</Text>
-          <Text variant="caption" tone="muted">{`${t.plan.duration(leg.minutes)} · ${t.plan.walk(Math.round(leg.metres ?? 0))}`}</Text>
-          {leg.steps.slice(0, 8).map((s, i) => (
-            <Text key={i} variant="caption" tone="muted">
-              {t.plan.trip.on(t.plan.trip.turn[s.turn] ?? t.plan.trip.turn.CONTINUE, s.street, s.metres)}
-            </Text>
-          ))}
-        </View>
-      </View>
-    );
-  }
   return (
     <View style={styles.step}>
+      <View style={styles.time} />
       <View style={styles.rail}>
-        <RouteBadge code={leg.code ?? "?"} system={leg.system ?? "other"} size="sm" />
+        <View style={[styles.line, { backgroundColor: p.separator }]} />
       </View>
-      <View style={[styles.body, current && [styles.current, { borderColor: p.ink }]]}>
-        <Text variant="headline">{t.plan.trip.ride(leg.code ?? "", leg.headsign)}</Text>
-        <View style={styles.meta}>
-          {leg.live && <Dot color={signal.live} />}
-          <Text variant="caption" tone="muted">
-            {`${leg.from.name} · ${t.plan.trip.leaves(clock(leg.start))} · ${leg.live ? t.plan.live : t.plan.scheduled}`}
-          </Text>
-        </View>
-        <Text variant="caption" tone="muted">
-          {t.plan.trip.stops(leg.stops.length + 1)}
+      <View style={[styles.body, styles.meta]}>
+        <Icon name={icons.clock} color={p.faint} size="xs" />
+        <Text variant="caption" tone="faint">
+          {t.plan.trip.wait(minutes)}
         </Text>
-        <Text variant="headline">{t.plan.trip.getOff(leg.to.name)}</Text>
+      </View>
+    </View>
+  );
+}
+
+type StepState = "done" | "now" | "next";
+
+/** One row of the timeline: the clock on the left, the rail, and what to do. The leg you are on is a solid card. */
+function Step({ leg, state }: { leg: Leg; state: StepState }) {
+  const p = usePalette();
+  const t = useT();
+  const now = state === "now";
+  const done = state === "done";
+  const tone = now ? "inverse" : done ? "faint" : "default";
+  const sub = now ? "inverse" : done ? "faint" : "muted";
+  const status = now ? `${t.plan.trip.now}. ` : done ? `${t.plan.trip.done}. ` : "";
+  const strike = done ? styles.struck : undefined;
+
+  const node =
+    leg.mode === "transit" ? (
+      <RouteBadge code={leg.code ?? "?"} system={leg.system ?? "other"} size="sm" />
+    ) : (
+      <Icon name={icons.walk} color={now ? p.text : done ? p.faint : p.muted} size="md" />
+    );
+
+  const lines =
+    leg.mode === "transit"
+      ? [t.plan.trip.ride(leg.code ?? "", leg.headsign), `${leg.from.name} · ${t.plan.trip.leaves(clock(leg.start))} · ${leg.live ? t.plan.live : t.plan.scheduled}`, t.plan.trip.stops(leg.stops.length + 1), t.plan.trip.getOff(leg.to.name)]
+      : [t.plan.trip.walkTo(leg.to.name), `${t.plan.duration(leg.minutes)} · ${t.plan.walk(Math.round(leg.metres ?? 0))}`];
+
+  return (
+    <View style={styles.step} accessible accessibilityLabel={`${clock(leg.start)}. ${status}${lines.join(". ")}`}>
+      <Text variant="caption" tone={done ? "faint" : "muted"} tabular style={styles.time}>
+        {clock(leg.start)}
+      </Text>
+      <View style={styles.rail}>
+        {node}
+        <View style={[styles.line, { backgroundColor: p.separator }]} />
+      </View>
+      <View style={[styles.body, now && [styles.card, { backgroundColor: p.ink }]]}>
+        {now && (
+          <Text variant="eyebrow" tone="inverse">
+            {t.plan.trip.now}
+          </Text>
+        )}
+        <Text variant="headline" tone={tone} style={strike}>
+          {lines[0]}
+        </Text>
+        {leg.mode === "transit" ? (
+          <>
+            <View style={styles.meta}>
+              {leg.live && !done && <Dot color={signal.live} />}
+              <Text variant="caption" tone={sub}>
+                {lines[1]}
+              </Text>
+            </View>
+            <Text variant="caption" tone={sub}>
+              {lines[2]}
+            </Text>
+            <Text variant="headline" tone={tone} style={strike}>
+              {lines[3]}
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text variant="caption" tone={sub}>
+              {lines[1]}
+            </Text>
+            {!done &&
+              leg.steps.slice(0, 8).map((s, i) => (
+                <Text key={i} variant="caption" tone={sub}>
+                  {t.plan.trip.on(t.plan.trip.turn[s.turn] ?? t.plan.trip.turn.CONTINUE, s.street, s.metres)}
+                </Text>
+              ))}
+          </>
+        )}
       </View>
     </View>
   );
@@ -200,9 +264,12 @@ const styles = StyleSheet.create({
   header: { gap: space[1] },
   heading: { marginBottom: space[2] },
   live: { flexDirection: "row", alignItems: "center", gap: space[3], padding: space[4], borderRadius: radius.lg, borderCurve: "continuous" },
-  step: { flexDirection: "row", gap: space[3], paddingVertical: space[2] },
-  rail: { width: size.tile.md, alignItems: "center" },
-  body: { flex: 1, gap: space[1] },
-  current: { borderLeftWidth: size.line.bar, paddingLeft: space[2] },
+  step: { flexDirection: "row", gap: space[3] },
+  time: { width: layout.timeColumn, paddingTop: space[1] },
+  rail: { width: size.tile.md, alignItems: "center", gap: space[1] },
+  line: { flex: 1, width: size.line.rule, minHeight: space[4] },
+  body: { flex: 1, gap: space[1], paddingBottom: space[4] },
+  card: { padding: space[4], marginBottom: space[3], borderRadius: radius.lg, borderCurve: "continuous" },
+  struck: { textDecorationLine: "line-through" },
   meta: { flexDirection: "row", alignItems: "center", gap: space[1.5], flexWrap: "wrap" },
 });
