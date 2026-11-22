@@ -52,3 +52,7 @@ Docs: https://docs.expo.dev/eas/index.md
 - Route codes: the feed joins paired SITP routes (`HK635` = K635 + H635). Use `describeRoute` in `src/transit/codes.ts`; `feedCode` is for API calls, `code`/`aliases` for anything a rider sees.
 - No code from paid templates (e.g. Code with Beto's platano): this repo is MIT and must stay redistributable.
 - Design system: read `docs/DESIGN.md` before touching UI. No raw numbers or colors in `src/app` or `src/components`; `npm run check` fails on them.
+
+## Git
+
+- Cuando un cambio pasa `npm run check`, súbelo a `main`: haz el commit y el push directo a `main`, o fusiona su PR enseguida. No dejes PR en borrador esperando.
