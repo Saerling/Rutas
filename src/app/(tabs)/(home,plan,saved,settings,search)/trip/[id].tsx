@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { toast } from "sonner-native";
 
@@ -9,6 +9,7 @@ import { Button } from "@/components/button";
 import { DetailScreen } from "@/components/detail-screen";
 import { Dot } from "@/components/dot";
 import { Icon, icons } from "@/components/icon";
+import { NextDeparture } from "@/components/next-departure";
 import { RouteBadge } from "@/components/route-badge";
 import { Empty } from "@/components/state";
 import { Text } from "@/components/text";
@@ -59,6 +60,9 @@ export default function TripScreen() {
   const fare = estimateFare(it);
   const firstRide = it.legs.find((l) => l.mode === "transit");
   const window = t.plan.window(clock(it.start), clock(it.end));
+  // The bus still to catch: the first one, or while guiding, the next one you are not already on.
+  const current = on && "leg" in guidance ? guidance.leg : -1;
+  const nextRide = it.legs.find((l, i) => l.mode === "transit" && i >= current && !(guidance.state === "riding" && i === current));
 
   const remind = async () => {
     void Haptics.selectionAsync();
@@ -76,6 +80,7 @@ export default function TripScreen() {
 
   return (
     <DetailScreen
+      overlay={nextRide && guidance.state !== "arrived" ? <NextDeparture leg={nextRide} /> : undefined}
       map={
         <TransitMap
           center={{ lat: it.legs[0].from.lat, lon: it.legs[0].from.lon }}
@@ -154,12 +159,39 @@ function Live({ guidance, legs }: { guidance: Guidance; legs: Leg[] }) {
               ? `${t.plan.trip.getOffNext}: ${legs[guidance.leg].to.name}`
               : `${t.plan.trip.stopsLeft(guidance.stopsLeft)} · ${t.plan.trip.getOff(legs[guidance.leg].to.name)}`;
   const urgent = guidance.state === "riding" && guidance.getOffNext;
+  const rides = legs.flatMap((l, i) => (l.mode === "transit" ? [i] : []));
+  // Which bus of the trip this is: the one you are on, or the one you are walking to.
+  const leg = "leg" in guidance ? guidance.leg : guidance.state === "arrived" ? legs.length : -1;
+  const n = leg < 0 ? 0 : Math.min(rides.length, rides.filter((i) => i < leg).length + 1);
+  const progress = rides.length > 1 && n > 0 && guidance.state !== "arrived" ? (guidance.state === "walking" ? t.plan.trip.towardBus(n, rides.length) : t.plan.trip.busOf(n, rides.length)) : null;
+
+  // Say it once when the rider moves on to the next bus, not on every location update.
+  const said = useRef(progress);
+  useEffect(() => {
+    if (progress && progress !== said.current) announce(progress);
+    said.current = progress;
+  }, [progress]);
+
   return (
     <View accessibilityLiveRegion="polite" style={[styles.live, { backgroundColor: urgent ? p.ink : p.surface }]}>
-      <Dot color={signal.live} pulse={guidance.state === "riding" || guidance.state === "walking"} />
-      <Text variant="headline" tone={urgent ? "inverse" : "default"} style={styles.body}>
-        {line}
-      </Text>
+      {progress && (
+        <View accessible accessibilityLabel={progress} style={styles.progress}>
+          <Text variant="eyebrow" tone={urgent ? "inverse" : "faint"}>
+            {progress}
+          </Text>
+          <View style={styles.segments}>
+            {rides.map((_, i) => (
+              <View key={i} style={[styles.segment, { backgroundColor: i < n ? (urgent ? p.background : p.ink) : p.separator }]} />
+            ))}
+          </View>
+        </View>
+      )}
+      <View style={styles.liveRow}>
+        <Dot color={signal.live} pulse={guidance.state === "riding" || guidance.state === "walking"} />
+        <Text variant="headline" tone={urgent ? "inverse" : "default"} style={styles.body}>
+          {line}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -263,7 +295,11 @@ function Step({ leg, state }: { leg: Leg; state: StepState }) {
 const styles = StyleSheet.create({
   header: { gap: space[1] },
   heading: { marginBottom: space[2] },
-  live: { flexDirection: "row", alignItems: "center", gap: space[3], padding: space[4], borderRadius: radius.lg, borderCurve: "continuous" },
+  live: { gap: space[3], padding: space[4], borderRadius: radius.lg, borderCurve: "continuous" },
+  liveRow: { flexDirection: "row", alignItems: "center", gap: space[3] },
+  progress: { gap: space[2] },
+  segments: { flexDirection: "row", gap: space[1] },
+  segment: { flex: 1, height: size.line.bar, borderRadius: radius.pill },
   step: { flexDirection: "row", gap: space[3] },
   time: { width: layout.timeColumn, paddingTop: space[1] },
   rail: { width: size.tile.md, alignItems: "center", gap: space[1] },

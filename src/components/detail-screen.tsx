@@ -5,7 +5,8 @@ import { usePalette, useRadius } from "@/theme/colors";
 import { layout, radius, size, space } from "@/theme/tokens";
 
 /** Map on top, a sheet of details sliding over it, lifted by a hairline and a soft shadow so it never melts into the map. Stops and routes share this frame. */
-export function DetailScreen({ map, children }: { map: ReactNode; children: ReactNode }) {
+/** `overlay` floats at the foot of the map, above the sheet. Unlike the map it stays readable to screen readers. */
+export function DetailScreen({ map, overlay, children }: { map: ReactNode; overlay?: ReactNode; children: ReactNode }) {
   const p = usePalette();
   const r = useRadius();
   const { height } = useWindowDimensions();
@@ -14,6 +15,11 @@ export function DetailScreen({ map, children }: { map: ReactNode; children: Reac
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ height: Math.round(height * layout.sheetMap) }}>
         {map}
       </View>
+      {overlay && (
+        <View pointerEvents="box-none" style={[styles.overlay, { height: Math.round(height * layout.sheetMap) - layout.sheetOverlap }]}>
+          {overlay}
+        </View>
+      )}
       <View style={[styles.sheet, { borderTopLeftRadius: r.xl, borderTopRightRadius: r.xl, backgroundColor: p.background, borderColor: p.border, boxShadow: p.shadowUp }]}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {children}
@@ -25,6 +31,7 @@ export function DetailScreen({ map, children }: { map: ReactNode; children: Reac
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  overlay: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 1, justifyContent: "flex-end", paddingHorizontal: layout.gutter, paddingBottom: space[3] },
   sheet: {
     flex: 1,
     marginTop: -layout.sheetOverlap,

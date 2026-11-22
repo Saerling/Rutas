@@ -10,6 +10,7 @@ import { Button } from "@/components/button";
 import { DetailScreen } from "@/components/detail-screen";
 import { FeedStatus } from "@/components/feed-status";
 import { BusGlyph } from "@/components/glyphs";
+import { HourBars } from "@/components/hour-bars";
 import { SaveButton } from "@/components/save-button";
 import { RouteBadge } from "@/components/route-badge";
 import { SkeletonList } from "@/components/skeleton";
@@ -106,6 +107,8 @@ export default function RouteScreen() {
             </View>
 
             <AlertCard alerts={data.alerts} />
+
+            {data.variants?.[0] && <HourBars departures={data.variants[0].departures} />}
 
             <View>
               <Text variant="title" style={styles.heading}>

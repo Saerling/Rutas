@@ -13,6 +13,7 @@ import { Empty } from "@/components/state";
 import { Text } from "@/components/text";
 import { useT } from "@/i18n";
 import { announce } from "@/lib/accessibility";
+import { clock } from "@/lib/format";
 import { useLocation } from "@/lib/location";
 import { remember, setSlot, useMyPlaces, usePlaces, usePlan, type MyPlace } from "@/lib/trip";
 import { usePalette } from "@/theme/colors";
@@ -25,6 +26,20 @@ type End = "from" | "to";
 type Editing = End | "home" | "work" | null;
 
 const LATER = [15, 30, 60];
+/** Parts of the day a rider plans ahead for: the morning commute, midday, and the evening rush home. */
+const SLOTS = { morning: 7, afternoon: 13, evening: 18 } as const;
+type Slot = keyof typeof SLOTS;
+
+/** The next time each part of the day starts: today if it is still ahead, otherwise tomorrow. */
+function slotTimes(now: Date): { slot: Slot; at: string; tomorrow: boolean }[] {
+  return (Object.keys(SLOTS) as Slot[]).map((slot) => {
+    const at = new Date(now);
+    at.setHours(SLOTS[slot], 0, 0, 0);
+    const tomorrow = at.getTime() <= now.getTime() + 15 * 60_000;
+    if (tomorrow) at.setDate(at.getDate() + 1);
+    return { slot, at: at.toISOString(), tomorrow };
+  });
+}
 const SOURCES = "https://transitous.org/sources/";
 
 export default function Plan() {
@@ -44,7 +59,8 @@ export default function Plan() {
   const query = useDeferredValue(text);
   const origin = useMemo(() => from ?? (here.status === "ready" ? { lat: here.lat, lon: here.lon } : null), [from, here]);
 
-  const [later, setLater] = useState(0);
+  const [later, setLater] = useState<number | Slot>(0);
+  const [slots, setSlots] = useState(() => slotTimes(new Date()));
   const [arriveBy, setArriveBy] = useState(false);
   const [wheelchair, setWheelchair] = useState(false);
   const [fewerTransfers, setFewerTransfers] = useState(false);
@@ -99,6 +115,14 @@ export default function Plan() {
     void Haptics.selectionAsync();
     setLater(minutes);
     setTime(minutes ? new Date(Date.now() + minutes * 60_000).toISOString() : null);
+  };
+
+  const pickSlot = (slot: Slot) => {
+    void Haptics.selectionAsync();
+    const fresh = slotTimes(new Date());
+    setSlots(fresh);
+    setLater(slot);
+    setTime(fresh.find((x) => x.slot === slot)!.at);
   };
 
   const fromLabel = from?.name ?? t.plan.here;
@@ -192,7 +216,11 @@ export default function Plan() {
             {LATER.map((m) => (
               <Chip key={m} label={t.plan.inMinutes(m)} selected={later === m} onPress={() => pickTime(m)} />
             ))}
-            {later > 0 && <Chip label={t.plan.arriveBy} selected={arriveBy} onPress={() => setArriveBy(!arriveBy)} />}
+            {slots.map(({ slot, at, tomorrow }) => {
+              const label = t.plan.slot((tomorrow ? t.plan.tomorrowSlots : t.plan.slots)[slot], clock(at));
+              return <Chip key={slot} label={label} selected={later === slot} onPress={() => pickSlot(slot)} />;
+            })}
+            {later !== 0 && <Chip label={t.plan.arriveBy} selected={arriveBy} onPress={() => setArriveBy(!arriveBy)} />}
             <Chip label={t.plan.fewerTransfers} selected={fewerTransfers} onPress={() => setFewerTransfers(!fewerTransfers)} />
             <Chip label={t.plan.accessible} selected={wheelchair} onPress={() => setWheelchair(!wheelchair)} />
           </ScrollView>

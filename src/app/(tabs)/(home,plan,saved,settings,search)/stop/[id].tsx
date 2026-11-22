@@ -171,8 +171,8 @@ export default function StopScreen() {
 
             {next ? <NextBus arrival={next} following={!!focus && followed === next} onPress={() => follow(next)} /> : <Empty title={t.stop.none.title} body={t.stop.none.body} />}
 
-            {/* Each live arrival already says so; the notice is for when times fall back to the timetable. */}
-            {!data.feed.live && <FeedStatus feed={data.feed} />}
+            {/* Live or not, say how old the data is: on a weak signal "live" from four minutes ago is not live. */}
+            <FeedStatus feed={data.feed} />
             <AlertCard alerts={data.alerts} />
 
             {later.length > 0 && (

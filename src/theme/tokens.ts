@@ -27,6 +27,8 @@ export const layout = {
   timeColumn: 56,
   mapInset: { top: 96, right: space[6], bottom: space[10], left: space[6] },
   sheetMap: 0.38,
+  /** Tallest bar in the small charts that sit inside a detail sheet. */
+  chartHeight: 64,
 } as const;
 
 export const fonts = {
