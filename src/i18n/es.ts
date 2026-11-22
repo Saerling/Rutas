@@ -81,6 +81,12 @@ export const es = {
   },
 
   home: {
+    first: {
+      title: "Guarda tu paradero de siempre",
+      body: "Así ves sus próximos buses apenas abres la app, sin buscarlo.",
+      action: (name: string) => `Guardar ${name}`,
+      done: (name: string) => `${name} guardado. Lo ves arriba, en Tus paraderos.`,
+    },
     question: "¿Para dónde vas?",
     searchLabel: "Buscar ruta, estación o paradero",
     searchPlaceholder: "Ruta, estación o paradero",
@@ -117,6 +123,7 @@ export const es = {
     now: "Ahora",
     inMinutes: (m: number) => (m < 60 ? `En ${m} min` : `En ${m / 60} h`),
     arriveBy: "Llegar a esa hora",
+    tags: { fastest: "Más rápida", fewestTransfers: "Menos transbordos", leastWalking: "Menos caminata" },
     slots: { morning: "En la mañana", afternoon: "En la tarde", evening: "En la noche" },
     tomorrowSlots: { morning: "Mañana temprano", afternoon: "Mañana en la tarde", evening: "Mañana en la noche" },
     slot: (part: string, at: string) => `${part}, ${at}`,
@@ -202,6 +209,8 @@ export const es = {
   },
 
   settings: {
+    search: "Buscar en ajustes",
+    noMatch: (q: string) => `Ningún ajuste con “${q}”`,
     general: "General",
     offline: {
       title: "Mapa sin conexión",
@@ -402,6 +411,7 @@ export const es = {
   },
 
   onboarding: {
+    stepOf: (n: number, total: number) => `Paso ${n} de ${total}`,
     note: {
       eyebrow: "Una nota de Croma",
       title: "Rutas es de Bogotá.",

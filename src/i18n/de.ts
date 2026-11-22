@@ -79,6 +79,12 @@ export const de: Messages = {
   },
 
   home: {
+    first: {
+      title: "Speichere deine Stammhaltestelle",
+      body: "Die nächsten Busse siehst du sofort beim Öffnen der App, ohne Suchen.",
+      action: (name) => `${name} speichern`,
+      done: (name) => `${name} gespeichert. Oben unter Deine Haltestellen.`,
+    },
     question: "Wohin geht’s?",
     searchLabel: "Linie, Station oder Haltestelle suchen",
     searchPlaceholder: "Linie, Station oder Haltestelle",
@@ -271,6 +277,7 @@ export const de: Messages = {
   },
 
   onboarding: {
+    stepOf: (n, total) => `Schritt ${n} von ${total}`,
     note: {
       eyebrow: "Eine Notiz von Croma",
       title: "Rutas gehört Bogotá.",

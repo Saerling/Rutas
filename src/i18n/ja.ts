@@ -79,6 +79,12 @@ export const ja: Messages = {
   },
 
   home: {
+    first: {
+      title: "いつもの停留所を保存",
+      body: "アプリを開くとすぐ次のバスが表示されます。検索は不要です。",
+      action: (name) => `${name} を保存`,
+      done: (name) => `${name} を保存しました。上の「あなたの停留所」にあります。`,
+    },
     question: "どこへ行きますか？",
     searchLabel: "路線・駅・停留所を検索",
     searchPlaceholder: "路線・駅・停留所",
@@ -271,6 +277,7 @@ export const ja: Messages = {
   },
 
   onboarding: {
+    stepOf: (n, total) => `ステップ ${n}/${total}`,
     note: {
       eyebrow: "Cromaからのメッセージ",
       title: "Rutasはボゴタのものです。",

@@ -32,6 +32,13 @@ for (const file of ROOTS.flatMap(files)) {
     });
 }
 
+// No text in the type scale may go below 11 pt: tab labels and footnotes are the floor riders still have to read in a moving bus.
+const MIN_TEXT = 11;
+const scale = readFileSync("src/theme/tokens.ts", "utf8").split("export const type = {")[1]?.split("} as const")[0] ?? "";
+for (const m of scale.matchAll(/(\w+):\s*\{\s*fontSize:\s*(\d+(?:\.\d+)?)/g)) {
+  if (Number(m[2]) < MIN_TEXT) problems.push(`src/theme/tokens.ts  type.${m[1]} is ${m[2]} pt; the floor is ${MIN_TEXT}`);
+}
+
 if (problems.length) {
   console.error(`Raw values found. Use tokens from src/theme (space, radius, size, layout, type, palette):\n`);
   console.error(problems.map((p) => `  ${p}`).join("\n"));

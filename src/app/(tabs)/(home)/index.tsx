@@ -7,6 +7,7 @@ import { StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Button } from "@/components/button";
 import { CardEntry } from "@/components/card-entry";
 import { FeedStatus } from "@/components/feed-status";
 import { Glass } from "@/components/glass";
@@ -20,11 +21,11 @@ import { Text } from "@/components/text";
 import { TransitMap } from "@/components/transit-map";
 import type { MapHandle } from "@/components/transit-map.types";
 import { useT } from "@/i18n";
-import { useAccessibility } from "@/lib/accessibility";
+import { announce, useAccessibility } from "@/lib/accessibility";
 import { prefetchStop, useHealth, useNearby } from "@/lib/api";
 import { greeting } from "@/lib/format";
 import { BOGOTA, useLocation } from "@/lib/location";
-import { useSaved, type SavedStop } from "@/lib/saved";
+import { toggleStop, useSaved, type SavedStop } from "@/lib/saved";
 import { usePalette } from "@/theme/colors";
 import { layout, radius, size, space } from "@/theme/tokens";
 
@@ -122,6 +123,25 @@ export default function Home() {
 
           <CardEntry />
 
+          {/* With nothing saved yet, the one thing worth doing is saving the stop you are standing at. */}
+          {savedStops.length === 0 && stops[0] && !outside && (
+            <View style={[styles.first, { borderColor: p.separator }]}>
+              <Text variant="headline">{t.home.first.title}</Text>
+              <Text variant="callout" weight={400} tone="muted">
+                {t.home.first.body}
+              </Text>
+              <Button
+                height="md"
+                label={t.home.first.action(stops[0].name)}
+                onPress={() => {
+                  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  toggleStop(stops[0]);
+                  announce(t.home.first.done(stops[0].name));
+                }}
+              />
+            </View>
+          )}
+
           {savedStops.length > 0 && (
             <View style={styles.section}>
               <SectionTitle title={t.home.yourStops} />
@@ -186,6 +206,7 @@ function SectionTitle({ title, detail }: { title: string; detail?: string }) {
 }
 
 const styles = StyleSheet.create({
+  first: { gap: space[2], padding: space[4], marginHorizontal: layout.gutter, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" },
   screen: { flex: 1 },
   top: { position: "absolute", left: space[4], right: space[4], alignItems: "flex-start" },
   locate: { position: "absolute", top: 0, right: space[4] },

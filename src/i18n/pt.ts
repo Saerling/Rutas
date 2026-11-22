@@ -79,6 +79,12 @@ export const pt: Messages = {
   },
 
   home: {
+    first: {
+      title: "Salve a parada que você sempre usa",
+      body: "Os próximos ônibus aparecem assim que você abre o app, sem buscar.",
+      action: (name) => `Salvar ${name}`,
+      done: (name) => `${name} salva. Está no alto, em Suas paradas.`,
+    },
     question: "Para onde você vai?",
     searchLabel: "Buscar linha, estação ou ponto",
     searchPlaceholder: "Linha, estação ou ponto",
@@ -271,6 +277,7 @@ export const pt: Messages = {
   },
 
   onboarding: {
+    stepOf: (n, total) => `Passo ${n} de ${total}`,
     note: {
       eyebrow: "Uma nota da Croma",
       title: "Rutas é de Bogotá.",

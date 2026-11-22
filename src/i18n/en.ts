@@ -78,6 +78,12 @@ export const en: Messages = {
   },
 
   home: {
+    first: {
+      title: "Save the stop you always use",
+      body: "Its next buses show up as soon as you open the app, no searching.",
+      action: (name) => `Save ${name}`,
+      done: (name) => `${name} saved. It's at the top, in Your stops.`,
+    },
     question: "Where are you going?",
     searchLabel: "Search for a route, station or stop",
     searchPlaceholder: "Route, station or stop",
@@ -114,6 +120,7 @@ export const en: Messages = {
     now: "Now",
     inMinutes: (m) => (m < 60 ? `In ${m} min` : `In ${m / 60} h`),
     arriveBy: "Arrive by then",
+    tags: { fastest: "Fastest", fewestTransfers: "Fewest transfers", leastWalking: "Least walking" },
     slots: { morning: "This morning", afternoon: "This afternoon", evening: "This evening" },
     tomorrowSlots: { morning: "Tomorrow morning", afternoon: "Tomorrow afternoon", evening: "Tomorrow evening" },
     slot: (part, at) => `${part}, ${at}`,
@@ -199,6 +206,8 @@ export const en: Messages = {
   },
 
   settings: {
+    search: "Search settings",
+    noMatch: (q) => `No setting matches “${q}”`,
     general: "General",
     offline: {
       title: "Offline map",
@@ -399,6 +408,7 @@ export const en: Messages = {
   },
 
   onboarding: {
+    stepOf: (n, total) => `Step ${n} of ${total}`,
     note: {
       eyebrow: "A note from Croma",
       title: "Rutas belongs to Bogotá.",

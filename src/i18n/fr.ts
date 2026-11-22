@@ -79,6 +79,12 @@ export const fr: Messages = {
   },
 
   home: {
+    first: {
+      title: "Enregistrez votre arrêt habituel",
+      body: "Ses prochains bus s'affichent dès l'ouverture de l'app, sans chercher.",
+      action: (name) => `Enregistrer ${name}`,
+      done: (name) => `${name} enregistré. Il est en haut, dans Vos arrêts.`,
+    },
     question: "Où allez-vous ?",
     searchLabel: "Rechercher une ligne, une station ou un arrêt",
     searchPlaceholder: "Ligne, station ou arrêt",
@@ -271,6 +277,7 @@ export const fr: Messages = {
   },
 
   onboarding: {
+    stepOf: (n, total) => `Étape ${n} sur ${total}`,
     note: {
       eyebrow: "Un mot de Croma",
       title: "Rutas appartient à Bogotá.",

@@ -79,6 +79,12 @@ export const zh: Messages = {
   },
 
   home: {
+    first: {
+      title: "保存你常用的站点",
+      body: "打开应用就能看到下一班车，无需搜索。",
+      action: (name) => `保存 ${name}`,
+      done: (name) => `已保存 ${name}，在上方“你的站点”中。`,
+    },
     question: "你要去哪里？",
     searchLabel: "搜索线路、车站或站点",
     searchPlaceholder: "线路、车站或站点",
@@ -270,6 +276,7 @@ export const zh: Messages = {
   },
 
   onboarding: {
+    stepOf: (n, total) => `第 ${n} 步，共 ${total} 步`,
     note: {
       eyebrow: "来自 Croma 的一封信",
       title: "Rutas 属于波哥大。",

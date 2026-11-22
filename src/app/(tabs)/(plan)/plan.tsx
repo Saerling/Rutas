@@ -7,7 +7,7 @@ import { toast } from "sonner-native";
 
 import { Chip } from "@/components/chip";
 import { Icon, icons, type IconName } from "@/components/icon";
-import { ItineraryCard } from "@/components/itinerary-card";
+import { ItineraryCard, strengths } from "@/components/itinerary-card";
 import { SkeletonList } from "@/components/skeleton";
 import { Empty } from "@/components/state";
 import { Text } from "@/components/text";
@@ -127,6 +127,7 @@ export default function Plan() {
 
   const fromLabel = from?.name ?? t.plan.here;
   const sorted = plan.data ? [...plan.data.itineraries].sort((a, b) => Date.parse(a.end) - Date.parse(b.end)) : [];
+  const tags = strengths(sorted);
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content}>
@@ -237,7 +238,7 @@ export default function Plan() {
               </Text>
               {sorted.map((it, i) => (
                 <Animated.View key={it.id} entering={motion.enter(Math.min(i, 5) * 60)}>
-                  <ItineraryCard it={it} fastest={i === 0} />
+                  <ItineraryCard it={it} fastest={i === 0} tags={tags.get(it.id)} />
                 </Animated.View>
               ))}
               {plan.data.walk && <ItineraryCard it={plan.data.walk} />}

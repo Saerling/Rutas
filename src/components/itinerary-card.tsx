@@ -15,7 +15,26 @@ import { RouteBadge } from "./route-badge";
 import { Text } from "./text";
 
 /** One way to get there, read the way Moovit shows it: how long, the chain of buses, when you leave and arrive, and how much you walk. */
-export function ItineraryCard({ it, fastest }: { it: Itinerary; fastest?: boolean }) {
+export type Strength = "fastest" | "fewestTransfers" | "leastWalking";
+
+/** What each option does best among the ones shown, like Vía tags its routes. Only a real difference earns a tag. */
+export function strengths(all: Itinerary[]): Map<string, Strength[]> {
+  const out = new Map<string, Strength[]>(all.map((it) => [it.id, []]));
+  if (all.length < 2) return out;
+  const best = (score: (it: Itinerary) => number, tag: Strength) => {
+    const values = all.map(score);
+    const min = Math.min(...values);
+    if (values.every((v) => v === min)) return;
+    const winners = all.filter((it) => score(it) === min);
+    if (winners.length === 1) out.get(winners[0].id)!.push(tag);
+  };
+  best((it) => Date.parse(it.end), "fastest");
+  best((it) => it.transfers, "fewestTransfers");
+  best((it) => Math.round(it.walkMetres / 100), "leastWalking");
+  return out;
+}
+
+export function ItineraryCard({ it, fastest, tags = [] }: { it: Itinerary; fastest?: boolean; tags?: Strength[] }) {
   const p = usePalette();
   const r = useRadius();
   const { accent } = useAccent();
@@ -30,12 +49,23 @@ export function ItineraryCard({ it, fastest }: { it: Itinerary; fastest?: boolea
   return (
     <PressableScale
       accessibilityRole="button"
-      accessibilityLabel={t.plan.option(duration, transfers, walk, window)}
+      accessibilityLabel={[...tags.map((k) => t.plan.tags[k]), t.plan.option(duration, transfers, walk, window)].join(". ")}
       onPress={() => {
         void Haptics.selectionAsync();
         router.push({ pathname: "/trip/[id]", params: { id: it.id } });
       }}
       style={[styles.card, { borderRadius: r.xl, backgroundColor: p.surface, borderColor: fastest ? accent : p.separator, borderWidth: fastest ? size.line.rule : size.line.hair }]}>
+      {tags.length > 0 && (
+        <View style={styles.tags} importantForAccessibility="no-hide-descendants">
+          {tags.map((k) => (
+            <View key={k} style={[styles.tag, { borderColor: k === "fastest" ? accent : p.separator }]}>
+              <Text variant="eyebrow" tone={k === "fastest" ? "default" : "muted"}>
+                {t.plan.tags[k]}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
       <View style={styles.top}>
         <Text variant="title" tabular>
           {duration}
@@ -88,4 +118,6 @@ const styles = StyleSheet.create({
   walk: { flexDirection: "row", alignItems: "center", gap: space[0.5] },
   meta: { gap: space[1] },
   live: { flexDirection: "row", alignItems: "center", gap: space[1.5] },
+  tags: { flexDirection: "row", flexWrap: "wrap", gap: space[1.5] },
+  tag: { paddingHorizontal: space[2], paddingVertical: space[0.5], borderRadius: radius.pill, borderWidth: size.line.hair },
 });

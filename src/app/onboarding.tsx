@@ -112,10 +112,15 @@ export default function Onboarding() {
       )}
 
       <View style={[styles.top, { paddingTop: insets.top + space[2] }]}>
-        <View style={styles.progress} accessible accessibilityRole="progressbar" accessibilityValue={{ min: 1, max: STEPS, now: step + 1 }}>
-          {Array.from({ length: STEPS }, (_, i) => (
-            <Segment key={i} active={i <= step} onPhoto={photoStep} />
-          ))}
+        <View accessible accessibilityRole="progressbar" accessibilityLabel={t.onboarding.stepOf(step + 1, STEPS)} accessibilityValue={{ min: 1, max: STEPS, now: step + 1 }} style={styles.stepper}>
+          <View style={styles.progress}>
+            {Array.from({ length: STEPS }, (_, i) => (
+              <Segment key={i} active={i <= step} onPhoto={photoStep} />
+            ))}
+          </View>
+          <Text variant="eyebrow" color={chrome}>
+            {t.onboarding.stepOf(step + 1, STEPS)}
+          </Text>
         </View>
         <View style={styles.brand}>
           <View style={styles.name}>
@@ -269,6 +274,7 @@ function Segment({ active, onPhoto }: { active: boolean; onPhoto: boolean }) {
 }
 
 const styles = StyleSheet.create({
+  stepper: { gap: space[1.5] },
   grow: { flex: 1 },
   screen: { flex: 1 },
   photo: {
