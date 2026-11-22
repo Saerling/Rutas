@@ -222,6 +222,18 @@ fun CercaScreen(abrir: (Capa) -> Unit) {
                     if (tm.isNotEmpty()) item("sal-tm") { GrupoSalidas("TransMilenio y alimentadores", Color(0xFFD7262C), tm, abrir) }
                 }
             }
+            // Sin nada guardado, lo que más sirve es guardar el paradero donde estás: así sus buses salen aquí al abrir la app.
+            val masCerca = cerca?.firstOrNull()
+            if (Guardados.paraderos.isEmpty() && masCerca != null && zona == null) item("primero") {
+                Tarjeta(Modifier.padding(horizontal = Margen).padding(top = 10.dp), radio = 24.dp) {
+                    Text("Guarda tu paradero de siempre", style = LectorType.Section, color = LectorColors.Text)
+                    Text("Así ves sus próximos buses apenas abres la app, sin buscarlo.", style = LectorType.Body, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp))
+                    Spacer(Modifier.height(12.dp))
+                    BotonExpresivo("Guardar ${masCerca.name}", Icons.Rounded.Star, {
+                        Tacto.alternar(true); Guardados.alternar(masCerca); Avisos.mostrar("${masCerca.name} guardado. Lo ves en Tus paraderos.")
+                    }, Modifier.fillMaxWidth(), estilo = EstiloBoton.RELLENO)
+                }
+            }
             if (Guardados.paraderos.isNotEmpty()) {
                 item("guardados-t") { Seccion("Tus paraderos") }
                 item("guardados") {
@@ -433,6 +445,8 @@ object Planeador {
     var desde by mutableStateOf<Place?>(null)
     var hasta by mutableStateOf<Place?>(null)
     var dentroDe by mutableIntStateOf(0)
+    /** Franja del día elegida (mañana, tarde, noche); null si se eligió ahora o en X min. */
+    var franja by mutableStateOf<String?>(null)
     var llegarA by mutableStateOf(false)
     var claveRes: String? = null
     var accesible by mutableStateOf(false)
@@ -551,8 +565,10 @@ fun IrScreen(abrir: (Capa) -> Unit) {
         } else {
             item("opciones") {
                 Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen).padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ChipSel("Ahora", Planeador.dentroDe == 0) { Planeador.dentroDe = 0; Planeador.llegarA = false }
-                    listOf(15, 30, 60).forEach { m -> ChipSel(if (m < 60) "En $m min" else "En 1 h", Planeador.dentroDe == m) { Planeador.dentroDe = m } }
+                    ChipSel("Ahora", Planeador.dentroDe == 0) { Planeador.dentroDe = 0; Planeador.franja = null; Planeador.llegarA = false }
+                    listOf(15, 30, 60).forEach { m -> ChipSel(if (m < 60) "En $m min" else "En 1 h", Planeador.dentroDe == m && Planeador.franja == null) { Planeador.dentroDe = m; Planeador.franja = null } }
+                    // Para planear el regreso o la salida de mañana sin abrir un reloj: mañana, tarde y noche.
+                    franjas().forEach { f -> ChipSel(f.texto, Planeador.franja == f.id) { Planeador.franja = f.id; Planeador.dentroDe = f.minutos() } }
                     if (Planeador.dentroDe > 0) ChipSel("Llegar a esa hora", Planeador.llegarA) { Planeador.llegarA = !Planeador.llegarA }
                     ChipSel("Máximo 1 transbordo", Planeador.menosTransbordos) { Planeador.menosTransbordos = !Planeador.menosTransbordos }
                     ChipSel("Accesible", Planeador.accesible) { Planeador.accesible = !Planeador.accesible }
@@ -611,7 +627,8 @@ fun IrScreen(abrir: (Capa) -> Unit) {
                     }.groupBy { cadena(it) }.values.toList()
                     item("res-t") { Seccion(if (cargando) "Actualizando…" else if (grupos.isEmpty()) "Ninguna con ese filtro" else "Todas las rutas · ${grupos.size} forma${if (grupos.size > 1) "s" else ""} de llegar") }
                     val mejor = grupos.firstOrNull()?.first()
-                    itemsIndexed(grupos, key = { i, x -> "v$i-" + x.first().id }) { _, g -> TarjetaViaje(g.first(), g.first() == mejor, Modifier.revelar("v" + g.first().id), siguientes = g.drop(1).sortedBy { x -> x.start }.take(3)) { abrir(Capa.Viaje(g.first())) } }
+                    val etiquetas = fortalezas(grupos.map { g -> g.first() })
+                    itemsIndexed(grupos, key = { i, x -> "v$i-" + x.first().id }) { _, g -> TarjetaViaje(g.first(), g.first() == mejor, Modifier.revelar("v" + g.first().id), siguientes = g.drop(1).sortedBy { x -> x.start }.take(3), etiquetas = etiquetas[g.first().id].orEmpty()) { abrir(Capa.Viaje(g.first())) } }
                     r.walk?.let { w -> item("pie") { TarjetaViaje(w, false) { abrir(Capa.Viaje(w)) } } }
                     if (r.next != null) item("mas") {
                         Box(Modifier.fillMaxWidth().padding(top = 10.dp), Alignment.Center) {
@@ -632,6 +649,42 @@ private fun ordenar(lista: List<Itinerary>, modo: Int): List<Itinerary> = when (
     2 -> lista.sortedWith(compareBy({ it.walkMetres }, { it.end }))
     3 -> lista.sortedWith(compareBy({ it.transfers }, { it.end }))
     else -> lista.sortedBy { it.minutes + it.walkMetres / 120 + it.transfers * 6 + runCatching { java.time.Duration.between(java.time.OffsetDateTime.now(), java.time.OffsetDateTime.parse(it.start)).toMinutes().coerceAtLeast(0) / 2 }.getOrDefault(0L) }
+}
+
+/** Una parte del día para planear: hoy si todavía no llega, si no mañana. */
+private class Franja(val id: String, val texto: String, val a: java.time.ZonedDateTime) {
+    fun minutos(): Int = java.time.Duration.between(java.time.ZonedDateTime.now(a.zone), a).toMinutes().toInt().coerceAtLeast(1)
+}
+
+private fun franjas(): List<Franja> {
+    val zona = java.time.ZoneId.of("America/Bogota")
+    val ahora = java.time.ZonedDateTime.now(zona)
+    return listOf(Triple("manana", 7, "mañana"), Triple("tarde", 13, "tarde"), Triple("noche", 18, "noche")).map { (id, h, nombre) ->
+        var a = ahora.withHour(h).withMinute(0).withSecond(0).withNano(0)
+        val manana = !a.isAfter(ahora.plusMinutes(15))
+        if (manana) a = a.plusDays(1)
+        val parte = if (manana) when (id) { "manana" -> "Mañana temprano"; else -> "Mañana en la $nombre" } else when (id) { "manana" -> "Esta mañana"; else -> "Esta $nombre" }
+        Franja(id, "$parte · $h:00", a)
+    }
+}
+
+/**
+ * En qué es mejor cada opción frente a las demás, como las etiquetas de Vía: solo una diferencia real gana etiqueta
+ * (si todas empatan o dos comparten el primer puesto, nadie la lleva).
+ */
+private fun fortalezas(lista: List<Itinerary>): Map<String, List<String>> {
+    val out = lista.associate { it.id to mutableListOf<String>() }
+    if (lista.size < 2) return out
+    fun mejor(etiqueta: String, valor: (Itinerary) -> Long) {
+        val valores = lista.map(valor)
+        val min = valores.min()
+        if (valores.all { it == min }) return
+        lista.filter { valor(it) == min }.singleOrNull()?.let { out.getValue(it.id).add(etiqueta) }
+    }
+    mejor("Más rápida") { runCatching { java.time.OffsetDateTime.parse(it.end).toEpochSecond() }.getOrDefault(Long.MAX_VALUE) }
+    mejor("Menos transbordos") { it.transfers.toLong() }
+    mejor("Menos caminata") { (it.walkMetres / 100).toLong() }
+    return out
 }
 
 /** La combinación de buses de un viaje (K309 › 1), para agrupar las salidas de la misma ruta. */
@@ -733,9 +786,17 @@ fun minutosHasta(iso: String): Int {
 
 /** Una forma de llegar, como en Moovit: cuánto tarda, la cadena de buses, la hora y el pasaje. */
 @Composable
-fun TarjetaViaje(it: Itinerary, rapida: Boolean, modifier: Modifier = Modifier, siguientes: List<Itinerary> = emptyList(), onClick: () -> Unit) {
+fun TarjetaViaje(it: Itinerary, rapida: Boolean, modifier: Modifier = Modifier, siguientes: List<Itinerary> = emptyList(), etiquetas: List<String> = emptyList(), onClick: () -> Unit) {
     val primero = it.legs.firstOrNull { l -> l.mode == "transit" }
     Tarjeta(modifier.padding(horizontal = Margen, vertical = 5.dp).then(if (co.saerling.rutas.fx.fxOn("tilt")) Modifier.inclinar(4f) else Modifier), radio = 26.dp, color = if (rapida) LectorColors.CardHigh else LectorColors.Card, onClick = onClick) {
+        if (etiquetas.isNotEmpty()) {
+            Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                etiquetas.forEach { e ->
+                    val (fondo, tinta) = if (e == "Más rápida") rellenoActivo() else LectorColors.PillFill to LectorColors.Text
+                    Text(e, style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = tinta, modifier = Modifier.clip(SuaveShape(10.dp)).background(fondo).padding(horizontal = 9.dp, vertical = 4.dp))
+                }
+            }
+        }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(duracion(it.minutes), style = LectorType.Hero, color = LectorColors.Text)
             Spacer(Modifier.weight(1f))
@@ -940,24 +1001,35 @@ private fun ParaderoConBuses(g: ParaderoGuardado, modifier: Modifier, onClick: (
 fun AjustesScreen(abrir: (Capa) -> Unit) {
     val ctx = LocalContext.current
     LaunchedEffect(Unit) { MapaOffline.revisar(ctx) }
+    var q by remember { mutableStateOf("") }
+    // Sin tildes ni mayúsculas: «ubicacion» encuentra «ubicación».
+    fun plano(x: String) = java.text.Normalizer.normalize(x, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}"), "").lowercase()
+    val buscado = plano(q.trim())
+    fun ve(vararg palabras: String) = buscado.isEmpty() || palabras.any { plano(it).contains(buscado) }
+    val verTransporte = ve("Transporte", "Tarjeta TuLlave saldo movimientos NFC", "Estado de las vías tráfico", "Novedades del sistema desvíos cierres")
+    val verApariencia = ve("Apariencia", "Personalización tema acento cristal esquinas animaciones", "Biblioteca de animaciones y funciones")
+    val verOffline = ve("Mapa sin conexión descargar túneles datos")
+    val verApp = ve("La app", "Buscar actualizaciones versión", "Código fuente GitHub")
     PaginaPestana("Ajustes") {
-        item("tr") { Seccion("Transporte") }
-        item("transporte") {
+        item("buscar") { Box(Modifier.padding(horizontal = Margen).padding(bottom = 6.dp)) { CampoBusqueda(q, { q = it }, "Buscar en ajustes") } }
+        if (!verTransporte && !verApariencia && !verOffline && !verApp) item("nada") { Vacio("Ningún ajuste con «${q.trim()}»") }
+        if (verTransporte) item("tr") { Seccion("Transporte") }
+        if (verTransporte) item("transporte") {
             GrupoAjustes(listOf(
                 itemAjuste(Icons.Rounded.Contactless, "Tarjeta TuLlave", "Leer saldo y movimientos con NFC") { abrir(Capa.Tarjeta) },
                 itemAjuste(Icons.Rounded.Traffic, "Estado de las vías", "Tráfico de Bogotá medido con los buses en vivo") { abrir(Capa.Vias) },
                 itemAjuste(Icons.Rounded.Campaign, "Novedades del sistema", "Desvíos, cierres y cambios de TransMilenio") { abrir(Capa.Novedades) },
             ))
         }
-        item("p") { Seccion("Apariencia") }
-        item("apariencia") {
+        if (verApariencia) item("p") { Seccion("Apariencia") }
+        if (verApariencia) item("apariencia") {
             GrupoAjustes(listOf(
                 itemAjuste(Icons.Rounded.Palette, "Personalización", "Tema, acento, cristal, esquinas, animaciones y más") { abrir(Capa.Personalizacion) },
                 itemAjuste(Icons.Rounded.AutoAwesome, "Biblioteca de animaciones y funciones", "${co.saerling.rutas.fx.Fx.count(IdsFxRutas)} de ${IdsFxRutas.size} activas · Magic UI, NumberFlow, coss ui, Motion Primitives") { abrir(Capa.BibliotecaFx) },
             ))
         }
-        item("m") { Seccion("Mapa sin conexión") }
-        item("offline") {
+        if (verOffline) item("m") { Seccion("Mapa sin conexión") }
+        if (verOffline) item("offline") {
             Tarjeta(Modifier.padding(horizontal = Margen), radio = 24.dp) {
                 Text("Descarga el mapa de Bogotá para verlo sin datos: en túneles, estaciones o cuando se acaba el plan.", style = LectorType.Body, color = LectorColors.Muted)
                 Spacer(Modifier.height(14.dp))
@@ -981,8 +1053,8 @@ fun AjustesScreen(abrir: (Capa) -> Unit) {
                 }
             }
         }
-        item("a") { Seccion("La app") }
-        item("app") {
+        if (verApp) item("a") { Seccion("La app") }
+        if (verApp) item("app") {
             GrupoAjustes(listOf(
                 itemAjuste(Icons.Rounded.SystemUpdate, "Buscar actualizaciones", "Tienes la ${co.saerling.rutas.NuevaVersion.nombreActual(ctx)}") {
                     co.saerling.rutas.NuevaVersion.buscarAhora(ctx)

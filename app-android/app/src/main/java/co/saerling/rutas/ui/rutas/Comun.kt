@@ -132,8 +132,9 @@ fun Insignia(codigo: String, sistema: String?, grande: Boolean = false) {
 
 /** Minutos que faltan, grandes y con el punto vivo si el dato es en vivo. */
 @Composable
-fun Minutos(a: Arrival, grande: Boolean = false) {
-    val vivo = a.basis != "scheduled"
+fun Minutos(a: Arrival, grande: Boolean = false, feedVivo: Boolean = true) {
+    // Sin punto verde si el tiempo es del horario o si TransMilenio dejó de publicar (Paradero #407).
+    val vivo = feedVivo && a.basis != "scheduled"
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (vivo) PuntoVivo()
         Spacer(Modifier.width(6.dp))

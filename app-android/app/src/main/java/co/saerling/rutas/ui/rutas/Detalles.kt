@@ -45,7 +45,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.saerling.rutas.data.*
@@ -94,10 +96,14 @@ private fun <T> rememberSondeo(clave: Any, intento: Int, cadaMs: Long, cargar: s
 fun ParaderoScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
     var intento by remember { mutableIntStateOf(0) }
     val (det, error) = rememberSondeo(id, intento, 10_000) { Api.paradero(id) }
-    var solo by remember { mutableStateOf<String?>(null) }
+    // Rutas elegidas en el filtro; vacío es todas. Una ruta que deja de pasar se suelta sola (Paradero #512 y #407).
+    var elegidas by remember { mutableStateOf(emptySet<String>()) }
+    val codigosVivos = det?.arrivals?.map { it.code }?.toSet().orEmpty()
+    val activas = elegidas.filter { it in codigosVivos }.toSet()
+    fun muestra(codigo: String?) = activas.isEmpty() || codigo in activas
     var tocado by remember { mutableStateOf<String?>(null) }
     var siguiendo by remember { mutableStateOf(false) }
-    val vienen = if (det?.feed?.live == true) det.incoming.filter { solo == null || it.code == solo } else emptyList()
+    val vienen = if (det?.feed?.live == true) det.incoming.filter { muestra(it.code) } else emptyList()
     val bus = vienen.firstOrNull { it.id == tocado }
     LaunchedEffect(bus == null) { if (bus == null) siguiendo = false }
     MapaConHoja(
@@ -134,11 +140,17 @@ fun ParaderoScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
                     val codigos = det.arrivals.map { it.code }.distinct()
                     if (codigos.size > 1) item("filtro") {
                         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = Margen).padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ChipSel("Todas", solo == null) { solo = null }
-                            codigos.forEach { c -> ChipSel(c, solo == c) { solo = if (solo == c) null else c } }
+                            ChipSel("Todas", activas.isEmpty()) { elegidas = emptySet() }
+                            codigos.forEach { c ->
+                                ChipSel(c, c in activas) {
+                                    val nuevas = if (c in activas) activas - c else activas + c
+                                    // Elegirlas todas es lo mismo que no elegir ninguna: vuelve a «Todas».
+                                    elegidas = if (nuevas.size == codigos.size) emptySet() else nuevas
+                                }
+                            }
                         }
                     }
-                    val lista = det.arrivals.filter { solo == null || it.code == solo }
+                    val lista = det.arrivals.filter { muestra(it.code) }
                     val primero = lista.firstOrNull()
                     if (primero == null) item("nada") { Vacio("Sin buses próximos", "Puede que ya no pasen rutas a esta hora.") }
                     else item("proximo") {
@@ -149,13 +161,14 @@ fun ParaderoScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
                                 Insignia(primero.code, primero.system, grande = true)
                                 Spacer(Modifier.width(12.dp))
                                 Text(primero.name, style = LectorType.Section, color = LectorColors.Text, modifier = Modifier.weight(1f), maxLines = 2)
-                                Minutos(primero, grande = true)
+                                Minutos(primero, grande = true, feedVivo = det.feed.live)
                                 Campana(primero, det.stop.id, det.stop.name)
                             }
                             Text(puntualidad(primero), style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 8.dp))
                         }
                     }
-                    if (!det.feed.live) item("feed") { Text("TransMilenio no está publicando en vivo: los tiempos son del horario.", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(horizontal = Margen, vertical = 10.dp)) }
+                    // En vivo o no, se dice qué tan reciente es el dato: con mala señal, «en vivo» de hace cuatro minutos ya no lo es.
+                    item("feed") { Frescura(det.feed) }
                     det.alerts.forEachIndexed { i, a -> item("al$i") { TarjetaAlerta(a) } }
                     if (lista.size > 1) item("luego") { Seccion("Después") }
                     if (lista.size > 1) item("despues") {
@@ -178,7 +191,7 @@ fun ParaderoScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
                                     Box(Modifier.widthIn(min = 56.dp)) { Insignia(a.code, a.system) }
                                     Spacer(Modifier.width(8.dp))
                                     Text(a.name, style = LectorType.Body, color = LectorColors.Text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Minutos(a)
+                                    Minutos(a, feedVivo = det.feed.live)
                                     Campana(a, det.stop.id, det.stop.name)
                                 }
                                 if (index < siguientes.lastIndex) {
@@ -288,6 +301,7 @@ fun RutaScreen(id: String, abrir: (Capa) -> Unit, onBack: () -> Unit) {
                     val salidas = variante?.departures.orEmpty()
                     if (salidas.isNotEmpty()) {
                         item("sal-t") { Seccion("Salidas de hoy desde ${paradas.firstOrNull()?.name ?: "la primera parada"}") }
+                        item("barras") { BarrasPorHora(salidas) }
                         item("sal") { Salidas(salidas) }
                     }
                     item("pt") { Seccion("Paradas · toca una para ver sus buses") }
@@ -452,6 +466,7 @@ fun ViajeScreen(it: Itinerary, onBack: () -> Unit) {
                             PuntoVivo(7.dp); Spacer(Modifier.width(6.dp))
                             Text("${busesViaje.size} bus${if (busesViaje.size > 1) "es" else ""} ${codigoVisible(tramoBus.code, tramoBus.headsign)} en vía cerca · míralos en el mapa", style = LectorType.Label, color = LectorColors.Text)
                         }
+                        ProximoBus(it, guia)
                         val p = it.pasaje()
                         if (p > 0) Text("Pasaje aproximado ${pesos(p)} (sin descuentos de transbordo)", style = LectorType.Label, color = LectorColors.Muted, modifier = Modifier.padding(top = 4.dp))
                         Spacer(Modifier.height(16.dp))
@@ -546,7 +561,7 @@ private fun TarjetaGuia(it: Itinerary, guia: Guia, terminar: () -> Unit) {
             }
             if (!compacta) Row(Modifier.padding(top = 6.dp)) {
                 Text(rotulo, style = LectorType.Label, color = suave, modifier = Modifier.weight(1f))
-                Text("Paso ${(guia.tramoActual ?: 0) + 1} de ${it.legs.size}", style = LectorType.Label, color = suave)
+                Text(cualBus(it, guia) ?: "Paso ${(guia.tramoActual ?: 0) + 1} de ${it.legs.size}", style = LectorType.Label, color = suave)
             }
         }
     }
@@ -775,4 +790,95 @@ private fun Campana(a: Arrival, paraderoId: String, paradero: String) {
         Icon(if (puesta) Icons.Rounded.NotificationsActive else Icons.Rounded.NotificationAdd, if (puesta) "Quitar aviso del ${a.code}" else "Avísame cuando llegue el ${a.code}",
             tint = if (puesta) MaterialTheme.colorScheme.primary else LectorColors.Muted, modifier = Modifier.size(20.dp))
     }
+}
+
+
+/** «En vivo · actualizado hace 2 min» o «Según horario · sin datos en vivo desde las 6:40 p. m.». Se refresca sola cada 15 s. */
+@Composable
+private fun Frescura(feed: Feed) {
+    var ahora by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(15_000); ahora = System.currentTimeMillis() } }
+    val desde = runCatching { java.time.Instant.parse(feed.asOf).toEpochMilli() }.getOrNull()
+    val min = desde?.let { ((ahora - it) / 60_000).coerceAtLeast(0) }
+    val edad = when { min == null -> null; min < 1 -> "hace un momento"; min < 60 -> "hace $min min"; else -> "desde las ${hora(feed.asOf)}" }
+    Row(Modifier.padding(horizontal = Margen, vertical = 10.dp).semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically) {
+        if (feed.live) { PuntoVivo(7.dp); Spacer(Modifier.width(6.dp)) }
+        Text(
+            if (feed.live) "En vivo${edad?.let { " · actualizado $it" } ?: ""}" else "Según horario · TransMilenio no está publicando en vivo${edad?.let { " ($it)" } ?: ""}",
+            style = LectorType.Label, color = if (feed.live) LectorColors.Text else LectorColors.Muted,
+        )
+    }
+}
+
+/**
+ * Cuándo sale cada ruta según el horario de hoy, una barra por hora; la más seguida en sólido y la hora de ahora marcada.
+ * TalkBack oye una sola frase con la hora pico en vez de una fila de barras.
+ */
+@Composable
+private fun BarrasPorHora(horas: List<String>) {
+    val cuenta = horas.mapNotNull { it.substringBefore(":").toIntOrNull() }.groupingBy { it }.eachCount()
+    if (cuenta.size < 2) return
+    val desde = cuenta.keys.min(); val hasta = cuenta.keys.max()
+    val barras = (desde..hasta).map { h -> h to (cuenta[h] ?: 0) }
+    val max = barras.maxOf { it.second }.coerceAtLeast(1)
+    val pico = barras.first { it.second == max }.first
+    val ahora = java.time.LocalTime.now(java.time.ZoneId.of("America/Bogota")).hour
+    fun hh(h: Int) = "%02d:00".format(h)
+    val frase = "Sale más seguido a las ${hh(pico)}, con $max salidas en esa hora"
+    Column(Modifier.padding(horizontal = Margen).padding(bottom = 12.dp).semantics(mergeDescendants = true) { contentDescription = frase }) {
+        Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            barras.forEach { (h, n) ->
+                val alto by animateFloatAsState(n.toFloat() / max, tween(if (Mov.reducido) 0 else 500), label = "barra")
+                Box(
+                    Modifier.weight(1f).fillMaxHeight(alto.coerceAtLeast(0.04f)).clip(SuaveShape(3.dp))
+                        .background(if (h == pico) LectorColors.Text else if (h == ahora) LectorColors.Muted else LectorColors.PillFill),
+                )
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+            Text(hh(desde), style = LectorType.Label, color = LectorColors.Muted)
+            Spacer(Modifier.weight(1f))
+            Text("Pico ${hh(pico)} · $max salidas", style = LectorType.Label, color = LectorColors.Text)
+            Spacer(Modifier.weight(1f))
+            Text(hh(hasta), style = LectorType.Label, color = LectorColors.Muted)
+        }
+    }
+}
+
+/** El bus que te toca tomar: cuál, de qué paradero sale y en cuántos minutos, en vivo o según horario. */
+@Composable
+private fun ProximoBus(it: Itinerary, guia: Guia) {
+    val actual = guia.tramoActual ?: -1
+    val enBus = guia is Guia.EnBus
+    val l = it.legs.withIndex().firstOrNull { (i, x) -> x.mode == "transit" && i >= actual && !(enBus && i == actual) }?.value ?: return
+    if (guia is Guia.Llegaste) return
+    val faltan = minutosHasta(l.start)
+    val codigo = codigoVisible(l.code, l.headsign)
+    val cuando = if (faltan <= 0) "sale ya" else if (faltan < 60) "sale en $faltan min" else "sale a las ${hora(l.start)}"
+    Row(
+        Modifier.padding(top = 10.dp).fillMaxWidth().clip(SuaveShape(18.dp)).background(LectorColors.CardHigh).padding(12.dp)
+            .semantics(mergeDescendants = true) { contentDescription = "Tu próximo bus: $codigo, $cuando desde ${l.from.name}. ${if (l.live) "En vivo" else "Según horario"}." },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Insignia(codigo, l.system)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text("TU PRÓXIMO BUS", style = LectorType.Label.copy(fontWeight = FontWeight.SemiBold), color = LectorColors.Muted)
+            Text("Sale de ${l.from.name}", style = LectorType.Section, color = LectorColors.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (l.live) { PuntoVivo(6.dp); Spacer(Modifier.width(5.dp)) }
+                Text("${if (l.live) "En vivo" else "Según horario"} · ${hora(l.start)}", style = LectorType.Label, color = LectorColors.Muted)
+            }
+        }
+        Text(if (faltan <= 0) "Ya" else if (faltan < 60) "$faltan min" else hora(l.start), style = LectorType.Hero.copy(fontWeight = FontWeight.Bold), color = LectorColors.Text)
+    }
+}
+
+/** «Bus 1 de 2» o «Hacia el bus 2 de 2» cuando el viaje tiene más de un bus; si tiene uno, null. */
+private fun cualBus(it: Itinerary, guia: Guia): String? {
+    val buses = it.legs.withIndex().filter { (_, l) -> l.mode == "transit" }.map { it.index }
+    if (buses.size < 2) return null
+    val tramo = guia.tramoActual ?: return null
+    val n = (buses.count { it < tramo } + 1).coerceAtMost(buses.size)
+    return if (it.legs.getOrNull(tramo)?.mode == "transit") "Bus $n de ${buses.size}" else "Hacia el bus $n de ${buses.size}"
 }
