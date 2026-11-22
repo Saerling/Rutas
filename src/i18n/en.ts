@@ -103,6 +103,10 @@ export const en: Messages = {
       body: "Search for any route or stop. If you turn on location, we show the ones a block away. We never store it.",
       action: "Turn on location",
     },
+    unavailable: {
+      title: "We can't find where you are",
+      body: "Your phone isn't giving us your location right now. That happens indoors or with GPS off. Meanwhile, search for any route or stop.",
+    },
     failed: { title: "We couldn't load the stops", body: "Check your connection. We'll try again as soon as it's back." },
     none: { title: "No stops within 700 m", body: "Search for a station name or the route you take." },
   },
@@ -354,6 +358,7 @@ export const en: Messages = {
     intro: { ios: "Hold the card to the top of your iPhone and keep it still until it vibrates.", android: "Hold the card to the back of your phone and keep it still until it vibrates." },
     read: "Read my card",
     again: "Read again",
+    turnOn: "Turn on NFC",
     reading: "Hold the card near",
     private: "The card is read on your phone. Its number never leaves it and we don't keep it.",
     balance: "Balance on the card",
@@ -378,7 +383,8 @@ export const en: Messages = {
       lost: "The card moved. Try again",
     },
     errors: {
-      unsupported: { title: "This phone can't read cards", body: "You need a phone with NFC. On Android, check that NFC is on in Settings." },
+      unsupported: { title: "This phone can't read cards", body: "You need a phone with NFC to read the card." },
+      off: { title: "NFC is off", body: "Your phone can read the card once NFC is on. Turn it on in Settings and come back." },
       not_tullave: { title: "Not a TuLlave", body: "That card didn't answer like a TuLlave. Try your TransMilenio card." },
       lost: { title: "The card moved", body: "Keep it still against the phone until it vibrates, then try again." },
       timeout: { title: "We couldn't find the card", body: "Hold it closer and keep it still. If it's in a case, take it out." },

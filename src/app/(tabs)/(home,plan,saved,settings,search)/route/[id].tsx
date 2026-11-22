@@ -106,7 +106,7 @@ export default function RouteScreen() {
               </Text>
             </View>
 
-            <AlertCard alerts={data.alerts} />
+            <AlertCard alerts={data.alerts} routes={[data.route]} />
 
             {data.variants?.[0] && <HourBars departures={data.variants[0].departures} />}
 

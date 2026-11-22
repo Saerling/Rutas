@@ -17,7 +17,6 @@ export const size = {
 export const layout = {
   gutter: space[4],
   tabBarClearance: 120,
-  sheetOverlap: 28,
   cardWidth: 228,
   readable: 320,
   shadowBleed: space[6],
@@ -26,7 +25,6 @@ export const layout = {
   /** The clock column on the left of a trip timeline. */
   timeColumn: 56,
   mapInset: { top: 96, right: space[6], bottom: space[10], left: space[6] },
-  sheetMap: 0.38,
   /** Tallest bar in the small charts that sit inside a detail sheet. */
   chartHeight: 64,
 } as const;

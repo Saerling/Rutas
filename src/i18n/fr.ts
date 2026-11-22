@@ -104,6 +104,10 @@ export const fr: Messages = {
       body: "Cherchez une ligne ou un arrêt. Si vous activez la localisation, nous montrons ceux à une rue de vous. Nous ne la gardons jamais.",
       action: "Activer la localisation",
     },
+    unavailable: {
+      title: "Impossible de vous situer",
+      body: "Votre téléphone ne donne pas votre position pour l’instant. Cela arrive à l’intérieur ou avec le GPS désactivé. En attendant, cherchez une ligne ou un arrêt.",
+    },
     failed: { title: "Impossible de charger les arrêts", body: "Vérifiez votre connexion. Nous réessayons dès qu’elle revient." },
     none: { title: "Aucun arrêt à moins de 700 m", body: "Cherchez le nom d’une station ou la ligne que vous prenez." },
   },
@@ -223,6 +227,7 @@ export const fr: Messages = {
     intro: { ios: "Approchez la carte du haut de votre iPhone et gardez-la immobile jusqu’à la vibration.", android: "Approchez la carte du dos du téléphone et gardez-la immobile jusqu’à la vibration." },
     read: "Lire ma carte",
     again: "Relire",
+    turnOn: "Activer le NFC",
     reading: "Approchez la carte",
     private: "La lecture se fait sur votre téléphone. Le numéro de la carte n’en sort pas et nous ne le gardons pas.",
     balance: "Solde sur la carte",
@@ -247,7 +252,8 @@ export const fr: Messages = {
       lost: "La carte a bougé. Réessayez",
     },
     errors: {
-      unsupported: { title: "Ce téléphone ne lit pas les cartes", body: "Il faut un téléphone avec NFC. Sur Android, vérifiez que le NFC est activé dans les Réglages." },
+      unsupported: { title: "Ce téléphone ne lit pas les cartes", body: "Il faut un téléphone avec NFC pour lire la carte." },
+      off: { title: "Le NFC est désactivé", body: "Votre téléphone peut lire la carte une fois le NFC activé. Activez-le dans les Réglages, puis revenez." },
       not_tullave: { title: "Ce n’est pas une TuLlave", body: "Cette carte n’a pas répondu comme une TuLlave. Essayez votre carte TransMilenio." },
       lost: { title: "La carte a bougé", body: "Gardez-la immobile contre le téléphone jusqu’à la vibration, puis réessayez." },
       timeout: { title: "Carte introuvable", body: "Approchez-la davantage et gardez-la immobile. Si elle est dans un étui, sortez-la." },

@@ -1,47 +1,53 @@
+import BottomSheet, { BottomSheetHandle, BottomSheetScrollView, type BottomSheetHandleProps } from "@gorhom/bottom-sheet";
 import type { ReactNode } from "react";
-import { ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { usePalette, useRadius } from "@/theme/colors";
-import { layout, radius, size, space } from "@/theme/tokens";
+import { layout, size, space } from "@/theme/tokens";
 
-/** Map on top, a sheet of details sliding over it, lifted by a hairline and a soft shadow so it never melts into the map. Stops and routes share this frame. */
-/** `overlay` floats at the foot of the map, above the sheet. Unlike the map it stays readable to screen readers. */
+const SNAPS = ["30%", "58%", "92%"];
+
+/** Map full-bleed behind, a draggable sheet of details over it — the same frame as the home tab, so dragging to see more map works everywhere.
+ * `overlay` floats over the top of the map, outside the sheet, and unlike the map stays readable to screen readers. */
 export function DetailScreen({ map, overlay, children }: { map: ReactNode; overlay?: ReactNode; children: ReactNode }) {
   const p = usePalette();
   const r = useRadius();
-  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   return (
     <View style={[styles.screen, { backgroundColor: p.background }]}>
-      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ height: Math.round(height * layout.sheetMap) }}>
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
         {map}
       </View>
       {overlay && (
-        <View pointerEvents="box-none" style={[styles.overlay, { height: Math.round(height * layout.sheetMap) - layout.sheetOverlap }]}>
+        <View pointerEvents="box-none" style={[styles.overlay, { top: insets.top + layout.mapInset.top - space[6] }]}>
           {overlay}
         </View>
       )}
-      <View style={[styles.sheet, { borderTopLeftRadius: r.xl, borderTopRightRadius: r.xl, backgroundColor: p.background, borderColor: p.border, boxShadow: p.shadowUp }]}>
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <BottomSheet
+        accessible={false}
+        index={1}
+        snapPoints={SNAPS}
+        enableDynamicSizing={false}
+        topInset={insets.top}
+        backgroundStyle={{ backgroundColor: p.background, borderRadius: r.sheet, boxShadow: p.shadowUp, borderWidth: size.line.hair, borderColor: p.border }}
+        handleIndicatorStyle={{ backgroundColor: p.fillStrong, width: size.control.sm }}
+        handleComponent={QuietHandle}>
+        <BottomSheetScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + layout.tabBarClearance }]} showsVerticalScrollIndicator={false}>
           {children}
-        </ScrollView>
-      </View>
+        </BottomSheetScrollView>
+      </BottomSheet>
     </View>
   );
 }
 
+/** The grabber is for fingers. Screen readers scroll the sheet's list directly, so the handle stays out of their way. */
+function QuietHandle(props: BottomSheetHandleProps) {
+  return <BottomSheetHandle {...props} accessible={false} />;
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  overlay: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 1, justifyContent: "flex-end", paddingHorizontal: layout.gutter, paddingBottom: space[3] },
-  sheet: {
-    flex: 1,
-    marginTop: -layout.sheetOverlap,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    borderCurve: "continuous",
-    borderWidth: size.line.hair,
-    borderBottomWidth: 0,
-  },
-  scroll: { flex: 1, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
-  // The tab bar floats over the end of the sheet, so the last row needs to scroll clear of it.
-  content: { padding: layout.gutter, paddingTop: space[6], gap: space[5], paddingBottom: layout.tabBarClearance },
+  overlay: { position: "absolute", left: 0, right: 0, zIndex: 1, paddingHorizontal: layout.gutter },
+  content: { padding: layout.gutter, paddingTop: space[6], gap: space[5] },
 });

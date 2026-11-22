@@ -42,6 +42,20 @@ const FRAME_REST_MS = 20_000;
 
 const keyOf = (a: Arrival) => `${a.routeId ?? a.code}-${a.plate ?? a.vehicle ?? a.at}`;
 
+/**
+ * Keys that survive a refresh: the predicted time moves every report, so keying on it remounted each row every few seconds,
+ * replaying its entrance and dropping the screen reader's place. A repeat (the same bus twice on a loop) gets a counter.
+ */
+function withKeys(list: Arrival[]): { a: Arrival; key: string }[] {
+  const seen = new Map<string, number>();
+  return list.map((a) => {
+    const base = keyOf(a);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return { a, key: n ? `${base}-${n}` : base };
+  });
+}
+
 export default function StopScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const p = usePalette();
@@ -64,7 +78,9 @@ export default function StopScreen() {
   const [picked, setPicked] = useState<string | null>(null);
   const followed = arrivals.find((a) => keyOf(a) === picked) ?? next;
   const live = !!data?.feed.live && followed?.basis !== "scheduled";
-  const { data: route } = useRoute(live ? (followed?.routeId ?? undefined) : undefined);
+  const { data: routeAnswer } = useRoute(live ? (followed?.routeId ?? undefined) : undefined);
+  // A route whose vehicles did not answer comes back with no buses. The map then keeps the stop's own nearby buses instead of an empty list.
+  const route = routeAnswer?.feed.live ? routeAnswer : undefined;
   const focus = live && followed?.plate ? (route?.buses.find((b) => b.plate === followed.plate) ?? null) : null;
   const way = useMemo(() => (route && stop ? wayTowards(route.patterns ?? [{ path: route.path }], stop, focus) : undefined), [route, stop, focus]);
   const mapBuses =
@@ -173,19 +189,19 @@ export default function StopScreen() {
               </ScrollView>
             )}
 
-            {next ? <NextBus arrival={next} following={!!focus && followed === next} onPress={() => follow(next)} /> : <Empty title={t.stop.none.title} body={t.stop.none.body} />}
+            {next ? <NextBus arrival={next} following={!!focus && followed === next} feedLive={data.feed.live} onPress={() => follow(next)} /> : <Empty title={t.stop.none.title} body={t.stop.none.body} />}
 
             {/* Live or not, say how old the data is: on a weak signal "live" from four minutes ago is not live. */}
             <FeedStatus feed={data.feed} />
-            <AlertCard alerts={data.alerts} />
+            <AlertCard alerts={data.alerts} routes={data.stop.routes} />
 
             {later.length > 0 && (
               <View>
                 <Text variant="title" style={styles.heading}>
                   {t.stop.later}
                 </Text>
-                {later.slice(0, 10).map((a, i) => (
-                  <ArrivalRow key={`${a.code}-${a.at}-${i}`} arrival={a} first={i === 0} index={i} following={!!focus && followed === a} onPress={() => follow(a)} />
+                {withKeys(later.slice(0, 10)).map(({ a, key }, i) => (
+                  <ArrivalRow key={key} arrival={a} first={i === 0} index={i} following={!!focus && followed === a} feedLive={data.feed.live} onPress={() => follow(a)} />
                 ))}
               </View>
             )}

@@ -106,6 +106,10 @@ export const es = {
       body: "Busca cualquier ruta o paradero. Si activas la ubicación, te mostramos los que tienes a una cuadra. Nunca la guardamos.",
       action: "Activar ubicación",
     },
+    unavailable: {
+      title: "No encontramos dónde estás",
+      body: "El teléfono no nos está dando tu ubicación. Pasa en lugares cerrados o con el GPS apagado. Mientras tanto, busca cualquier ruta o paradero.",
+    },
     failed: { title: "No pudimos cargar los paraderos", body: "Revisa tu conexión. Lo intentamos de nuevo apenas vuelva." },
     none: { title: "No hay paraderos a 700 m", body: "Busca el nombre de una estación o la ruta que tomas." },
   },
@@ -357,6 +361,7 @@ export const es = {
     intro: { ios: "Acerca la tarjeta a la parte de arriba de tu iPhone y déjala quieta hasta que vibre.", android: "Acerca la tarjeta a la parte de atrás del teléfono y déjala quieta hasta que vibre." },
     read: "Leer mi tarjeta",
     again: "Leer otra vez",
+    turnOn: "Activar NFC",
     reading: "Acerca la tarjeta",
     private: "La lectura pasa en tu teléfono. El número de la tarjeta no sale de él y no lo guardamos.",
     balance: "Saldo en la tarjeta",
@@ -381,7 +386,8 @@ export const es = {
       lost: "Se movió la tarjeta. Intenta de nuevo",
     },
     errors: {
-      unsupported: { title: "Este teléfono no lee tarjetas", body: "Necesitas un teléfono con NFC. En Android, revisa que el NFC esté activado en Ajustes." },
+      unsupported: { title: "Este teléfono no lee tarjetas", body: "Necesitas un teléfono con NFC para leer la tarjeta." },
+      off: { title: "El NFC está apagado", body: "Tu teléfono puede leer la tarjeta cuando el NFC está encendido. Actívalo en Ajustes y vuelve." },
       not_tullave: { title: "No es una TuLlave", body: "Esa tarjeta no respondió como una TuLlave. Prueba con tu tarjeta de TransMilenio." },
       lost: { title: "Se movió la tarjeta", body: "Déjala quieta contra el teléfono hasta que vibre, y vuelve a intentar." },
       timeout: { title: "No encontramos la tarjeta", body: "Acércala más y déjala quieta. Si tiene funda, sácala." },
