@@ -213,21 +213,29 @@ fun Mapa(
                 lineColor(Expression.get("color")), lineWidth(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(12, 3f), Expression.stop(17, 8f))),
                 lineOpacity(0.85f), lineCap("round"), lineJoin("round"),
             ))
-            // Buses vistos desde arriba, girados hacia donde van (alineados al mapa) y más grandes al acercarse.
+            // Buses como en Paradero: un bus pequeño visto desde arriba en el color de su sistema, girado hacia donde va.
+            // El que tocaste lleva un halo suave y se dibuja más grande; los códigos aparecen al acercarse y no se montan.
+            for (sistema in BusesEnMovimiento.SISTEMAS.keys) s.addImage("bus-$sistema", BusesEnMovimiento.imagen(ctx, sistema))
+            val tinta = if (oscuro) 0xFFFAFAFA.toInt() else 0xFF09090B.toInt()
+            s.addLayer(CircleLayer("buses-halo", "buses").withProperties(
+                circleRadius(Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(11, 14f), Expression.stop(16, 26f))),
+                circleColor(tinta), circleOpacity(if (oscuro) 0.2f else 0.1f), circleBlur(0.5f),
+            ).withFilter(Expression.eq(Expression.get("foco"), 1)))
+            val foco = Expression.eq(Expression.get("foco"), 1)
             s.addLayer(SymbolLayer("buses", "buses").withProperties(
-                iconImage(Expression.get("icono")), iconRotate(Expression.get("rumbo")), iconRotationAlignment("map"), iconPitchAlignment("map"),
+                iconImage(Expression.get("icono")), iconRotate(Expression.get("rumbo")), iconRotationAlignment("map"),
                 iconSize(Expression.interpolate(Expression.linear(), Expression.zoom(),
-                    Expression.stop(11, Expression.product(Expression.literal(0.45f), Expression.get("escala"))),
-                    Expression.stop(15, Expression.product(Expression.literal(0.85f), Expression.get("escala"))),
-                    Expression.stop(18, Expression.product(Expression.literal(1.25f), Expression.get("escala"))))),
-                iconAllowOverlap(true), iconIgnorePlacement(true), symbolSortKey(Expression.get("orden")),
+                    Expression.stop(11, Expression.switchCase(foco, Expression.literal(0.6f), Expression.literal(0.45f))),
+                    Expression.stop(16, Expression.switchCase(foco, Expression.literal(1.5f), Expression.literal(1.1f))))),
+                iconAllowOverlap(true), iconIgnorePlacement(true), symbolSortKey(Expression.get("foco")),
             ))
             s.addLayer(SymbolLayer("buses-codigo", "buses").withProperties(
-                // Las etiquetas que chocan se ocultan (con 80 buses cerca era una sopa de códigos); el bus resaltado
-                // se coloca primero (clave más baja) y nunca pierde la suya.
-                iconImage(Expression.get("etiqueta")), iconAnchor("top"), iconOffset(arrayOf(0f, 22f)), iconAllowOverlap(false), iconIgnorePlacement(false),
-                iconPadding(2f), symbolSortKey(Expression.product(Expression.literal(-1), Expression.get("orden"))),
-            ).apply { minZoom = 14f })
+                textField(Expression.get("codigo")), textFont(arrayOf("Open Sans Bold")),
+                textSize(Expression.switchCase(foco, Expression.literal(12f), Expression.literal(10f))),
+                textOffset(arrayOf(0f, 2.2f)), textAnchor("top"), textAllowOverlap(false), textOptional(true),
+                textColor(tinta), textHaloColor(if (oscuro) 0xFF09090B.toInt() else 0xFFFDFCFC.toInt()), textHaloWidth(1.6f),
+                symbolSortKey(Expression.product(Expression.literal(-1), Expression.get("foco"))),
+            ).apply { minZoom = 13f })
             s.addLayer(CircleLayer("incidentes-punto", "incidentes").withProperties(
                 circleRadius(6.5f), circleColor(Expression.get("color")), circleStrokeColor(0xFFFFFFFF.toInt()), circleStrokeWidth(2f),
             ).withFilter(Expression.eq(Expression.get("punto"), true)))
@@ -259,79 +267,29 @@ fun Mapa(
             }
         }))
     }
-    // Cada bus avanza por la calle de donde estaba a donde está (1,2 s), como los carros de Uber, en vez de saltar.
-    // Si el servidor manda el tramo recorrido, el bus lo sigue (dobla las esquinas); si no, va en línea recta.
-    val enPantalla = remember { HashMap<String, Pair<Double, Double>>() }
-    val rumbos = remember { HashMap<String, Double>() }
-    LaunchedEffect(estilo, buses, resaltado) {
+    // Movimiento de Paradero: cada bus va por la línea de la ruta a la velocidad de sus reportes y se acomoda a cada
+    // reporte nuevo en vez de saltar; fuera de la línea sigue con la velocidad que traía. Ver BusesEnMovimiento.
+    val movimiento = remember { BusesEnMovimiento() }
+    LaunchedEffect(tramos) {
+        movimiento.lineas(tramos.filter { !it.discontinuo && it.puntos.size > 1 }.map { t -> Linea(t.puntos.map { doubleArrayOf(it[0], it[1]) }) })
+    }
+    LaunchedEffect(buses, resaltado) { movimiento.reportar(buses, resaltado) }
+    LaunchedEffect(estilo, resaltado) {
         val s = estilo ?: return@LaunchedEffect
         val fuente = s.getSourceAs<GeoJsonSource>("buses") ?: return@LaunchedEffect
-        class Mov(val b: Bus, val camino: List<Pair<Double, Double>>, val icono: String, val etiqueta: String, val rumbo: Double)
-        val datos = buses.map { b ->
-            val color = colorSistema(b.system).toArgb()
-            val hex = String.format("%06X", 0xFFFFFF and color)
-            val art = b.system == "troncal" || b.system == "dual"
-            val icono = "bus-$hex-${if (art) "a" else "n"}"
-            val codigo = b.code.orEmpty()
-            if (s.getImage(icono) == null) s.addImage(icono, IconosMapa.busArriba(ctx, color, art))
-            if (s.getImage("et-$codigo-$hex") == null) s.addImage("et-$codigo-$hex", IconosMapa.etiqueta(ctx, codigo, color))
-            val destino = b.lat to b.lon
-            val antes = enPantalla[b.id]?.takeIf { p -> metrosEntre(p, destino) in 2.0..900.0 }
-            val tramo = b.trail?.filter { it.size >= 2 }?.map { it[1] to it[0] }.orEmpty()
-            val camino = when {
-                antes == null -> listOf(destino)
-                // El tramo arranca cerca de donde lo vimos: se sigue la calle.
-                tramo.size >= 2 && metrosEntre(tramo.first(), antes) < 120 -> listOf(antes) + tramo.drop(1).dropLast(1) + destino
-                else -> listOf(antes, destino)
-            }
-            // Sin rumbo nuevo, el bus conserva el último (no se voltea al norte).
-            val rumbo = b.bearing ?: rumbos[b.id] ?: 0.0
-            rumbos[b.id] = rumbo
-            Mov(b, camino, icono, "et-$codigo-$hex", rumbo)
-        }
-        fun enCamino(c: List<Pair<Double, Double>>, t: Float): Pair<Pair<Double, Double>, Double?> {
-            if (c.size == 1) return c[0] to null
-            val largos = c.zipWithNext { a, b -> metrosEntre(a, b) }
-            var falta = largos.sum() * t
-            for (k in largos.indices) {
-                val l = largos[k]
-                if (falta <= l || k == largos.lastIndex) {
-                    val f = if (l > 0) (falta / l).coerceIn(0.0, 1.0) else 1.0
-                    val a = c[k]; val b = c[k + 1]
-                    val rumbo = if (l > 3) Math.toDegrees(Math.atan2((b.second - a.second) * Math.cos(Math.toRadians(a.first)), b.first - a.first)).let { (it + 360) % 360 } else null
-                    return (a.first + (b.first - a.first) * f to a.second + (b.second - a.second) * f) to rumbo
-                }
-                falta -= l
-            }
-            return c.last() to null
-        }
-        fun pintar(t: Float) {
-            fuente.setGeoJson(FeatureCollection.fromFeatures(datos.map { m ->
-                val (p, rumboTramo) = enCamino(m.camino, t)
-                enPantalla[m.b.id] = p
-                // Mientras dobla una esquina, apunta hacia donde va en ese momento; al llegar, al rumbo de la calle.
-                val rumbo = if (t < 1f && m.camino.size > 2 && rumboTramo != null) rumboTramo else m.rumbo
-                Feature.fromGeometry(Point.fromLngLat(p.second, p.first)).apply {
-                    addStringProperty("id", m.b.id); addStringProperty("icono", m.icono); addStringProperty("etiqueta", m.etiqueta)
-                    addNumberProperty("rumbo", rumbo)
-                    addNumberProperty("escala", if (m.b.id == resaltado) 1.35 else 1.0)
-                    addNumberProperty("orden", if (m.b.id == resaltado) 2 else 1)
+        while (true) {
+            val quieto = co.saerling.rutas.ui.Mov.reducido
+            fuente.setGeoJson(FeatureCollection.fromFeatures(movimiento.cuadro(quieto).map { b ->
+                Feature.fromGeometry(Point.fromLngLat(b.en[0], b.en[1])).apply {
+                    addStringProperty("id", b.id)
+                    addStringProperty("icono", BusesEnMovimiento.icono(b.sistema))
+                    addStringProperty("codigo", b.codigo.orEmpty())
+                    addNumberProperty("rumbo", b.rumbo)
+                    addNumberProperty("foco", if (b.id == resaltado) 1 else 0)
                 }
             }))
+            kotlinx.coroutines.delay(if (quieto) BusesEnMovimiento.QUIETO_MS else BusesEnMovimiento.CUADRO_MS)
         }
-        // Con muchos buses en pantalla no se anima (cada cuadro reescribe todos): se ahorra batería.
-        val mueve = !co.saerling.rutas.ui.Mov.reducido && datos.size <= 120 && datos.any { it.camino.size > 1 }
-        if (mueve) {
-            val t0 = androidx.compose.runtime.withFrameNanos { it }
-            while (true) {
-                val f = ((androidx.compose.runtime.withFrameNanos { it } - t0) / 1.4e9).toFloat().coerceIn(0f, 1f)
-                pintar(1f - (1f - f) * (1f - f))
-                if (f >= 1f) break
-                kotlinx.coroutines.delay(48)
-            }
-        } else pintar(1f)
-        val vivos = buses.map { it.id }.toSet()
-        enPantalla.keys.retainAll(vivos); rumbos.keys.retainAll(vivos)
     }
     LaunchedEffect(estilo, buses, trafico) {
         val s = estilo ?: return@LaunchedEffect
@@ -402,7 +360,7 @@ private fun MapaFalso(modifier: Modifier, puntos: List<PuntoMapa>, tramos: List<
     val ctx = LocalContext.current
     val oscuro = TemaActual.oscuro
     val iconos = remember(puntos, oscuro) { puntos.associate { it.id to IconosMapa.placa(ctx, it.estacion, it.fuerte, oscuro).asImageBitmap() } }
-    val iconosBus = remember(buses) { buses.map { b -> val c = colorSistema(b.system).toArgb(); IconosMapa.busArriba(ctx, c, b.system == "troncal" || b.system == "dual").asImageBitmap() to IconosMapa.etiqueta(ctx, b.code.orEmpty(), c).asImageBitmap() } }
+    val iconosBus = remember(buses) { buses.map { b -> val c = colorSistema(b.system).toArgb(); BusesEnMovimiento.imagen(ctx, BusesEnMovimiento.icono(b.system).removePrefix("bus-")).asImageBitmap() to IconosMapa.etiqueta(ctx, b.code.orEmpty(), c).asImageBitmap() } }
     androidx.compose.foundation.Canvas(modifier) {
         drawRect(fondo)
         for (i in 0..12) {
